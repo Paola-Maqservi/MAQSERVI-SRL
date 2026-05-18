@@ -131,6 +131,7 @@ function App() {
   const [bEstado,setBEstado]=React.useState("todos");
   const [bDesde,setBDesde]=React.useState("");
   const [bHasta,setBHasta]=React.useState("");
+  const [bListaN,setBListaN]=React.useState("todos");
 
   const [fEstado,setFEstado]=React.useState("confirmado");
   const [fHora,setFHora]=React.useState("");
@@ -276,6 +277,9 @@ function App() {
     if(bEstado!=="todos"&&s.estado!==bEstado)return false;
     if(bDesde&&s.fecha<bDesde)return false;
     if(bHasta&&s.fecha>bHasta)return false;
+    if(bListaN==="con"&&!s.lista_n_precio)return false;
+    if(bListaN==="cobrado"&&(!s.lista_n_precio||!s.lista_n_cobrado))return false;
+    if(bListaN==="pendiente"&&(!s.lista_n_precio||s.lista_n_cobrado))return false;
     if(bTexto){const t=bTexto.toLowerCase();return[s.cliente,s.proveedor,s.remito,s.factura,s.cotizacion,s.direccion,s.recordatorio_texto].some(v=>v&&v.toLowerCase().includes(t));}
     return true;
   });
@@ -371,6 +375,12 @@ function App() {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div><label style={LBL}>Desde</label><input type="date" value={bDesde} onChange={e=>setBDesde(e.target.value)} style={INP}/></div>
               <div><label style={LBL}>Hasta</label><input type="date" value={bHasta} onChange={e=>setBHasta(e.target.value)} style={INP}/></div>
+            </div>
+            <label style={LBL}>Lista N</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+              {[["todos","Todos","#333"],["con","Con Lista N","#8e44ad"],["cobrado","✅ Cobrados","#27ae60"],["pendiente","⏳ Pendientes","#e67e22"]].map(([val,lbl2,col])=>(
+                <button key={val} onClick={()=>setBListaN(val)} style={{background:bListaN===val?col:"#f0f0f0",color:bListaN===val?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{lbl2}</button>
+              ))}
             </div>
           </div>
           <div style={{fontSize:12,color:"#888",marginBottom:8}}>{filtrados.length} resultado{filtrados.length!==1?"s":""}</div>

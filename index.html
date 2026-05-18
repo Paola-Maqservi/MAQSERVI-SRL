@@ -21,13 +21,13 @@ const SB = "https://rlacqaxsedwunmlqqzoo.supabase.co";
 const KEY = "sb_publishable_BJcqG7mEY4yKvLkzRRAsTA_zasGKqKL";
 const HD = {"Content-Type":"application/json","apikey":KEY,"Authorization":"Bearer "+KEY};
 
-async function GET(t,q) { const r=await fetch(SB+"/rest/v1/"+t+(q||""),{headers:HD}); return r.json(); }
-async function POST(t,b) { const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)}); return r.json(); }
-async function PATCH(t,id,b) { await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"PATCH",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)}); }
-async function DEL(t,id) { await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"DELETE",headers:HD}); }
-async function DELWHERE(t,f,v) { await fetch(SB+"/rest/v1/"+t+"?"+f+"=eq."+v,{method:"DELETE",headers:HD}); }
+async function GET(t,q){const r=await fetch(SB+"/rest/v1/"+t+(q||""),{headers:HD});return r.json();}
+async function POST(t,b){const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)});return r.json();}
+async function PATCH(t,id,b){await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"PATCH",headers:HD,body:JSON.stringify(b)});}
+async function DEL(t,id){await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"DELETE",headers:HD});}
+async function DELW(t,f,v){await fetch(SB+"/rest/v1/"+t+"?"+f+"=eq."+v,{method:"DELETE",headers:HD});}
 
-const ESTADOS = [
+const ESTADOS=[
   {id:"confirmado",label:"Confirmado",color:"#e74c3c",text:"#fff"},
   {id:"facturado",label:"Facturado",color:"#f1c40f",text:"#7a6000"},
   {id:"suspendido",label:"Suspendido",color:"#95a5a6",text:"#fff"},
@@ -43,263 +43,283 @@ function fmtC(s){return pD(s).toLocaleDateString("es-AR",{weekday:"short",day:"n
 function sumD(s,n){const d=pD(s);d.setDate(d.getDate()+n);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 function lunSem(s){const d=pD(s);d.setDate(d.getDate()-d.getDay());return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 function iniMes(s){const d=pD(s);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-01";}
-function finMes(s){const d=pD(s);return new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().split("T")[0];}
+function finMes(s){const d=pD(s);return new Date(pD(s).getFullYear(),pD(s).getMonth()+1,0).toISOString().split("T")[0];}
 function getEst(id){return ESTADOS.find(e=>e.id===id)||ESTADOS[0];}
 
-const S = {
-  inp:{width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",borderRadius:10,boxSizing:"border-box",marginBottom:10,background:"#fff",color:"#222"},
-  lbl:{fontSize:11,color:"#888",marginBottom:4,display:"block",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5},
-  btnR:{background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%"},
-  btnG:{background:"#fff",color:"#555",border:"1px solid #ddd",borderRadius:12,padding:"14px",fontSize:15,cursor:"pointer",width:"100%"},
-};
+const INP={width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",borderRadius:10,boxSizing:"border-box",marginBottom:10,background:"#fff",color:"#222"};
+const LBL={fontSize:11,color:"#888",marginBottom:4,display:"block",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5};
+const BTNR={background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%"};
+const BTNG={background:"#fff",color:"#555",border:"1px solid #ddd",borderRadius:12,padding:"14px",fontSize:15,cursor:"pointer",width:"100%"};
+
+// Carga todos los servicios de un rango con sus items en una sola llamada eficiente
+async function cargarServiciosConItems(desde, hasta) {
+  const servicios = await GET("servicios","?fecha=gte."+desde+"&fecha=lte."+hasta+"&order=fecha,hora");
+  if (!Array.isArray(servicios) || servicios.length === 0) return [];
+  
+  // Cargar todos los items de una vez
+  const ids = servicios.map(s=>s.id).join(",");
+  const todosItems = await GET("servicio_items","?servicio_id=in.("+ids+")&order=created_at");
+  const itemsMap = {};
+  if (Array.isArray(todosItems)) {
+    todosItems.forEach(it=>{
+      if (!itemsMap[it.servicio_id]) itemsMap[it.servicio_id]=[];
+      itemsMap[it.servicio_id].push(it);
+    });
+  }
+  return servicios.map(s=>({...s, _items: itemsMap[s.id]||[]}));
+}
+
+function Tarjeta({s, onEditar, onBorrar}) {
+  const est = getEst(s.estado);
+  if (s.estado==="recordatorio") return (
+    <div style={{background:"#ebf5fb",borderLeft:"4px solid #3498db",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",gap:7,alignItems:"center"}}>
+          <span style={{background:"#3498db",color:"#fff",fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>📝 Recordatorio</span>
+          <span style={{fontSize:11,color:"#aaa"}}>{fmtC(s.fecha)}</span>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>onEditar(s)} style={{background:"#d6eaf8",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
+          <button onClick={()=>onBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
+        </div>
+      </div>
+      {s.recordatorio_texto&&<div style={{fontSize:14,color:"#222",marginTop:6,fontWeight:500}}>{s.recordatorio_texto}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{background:"#fff",borderLeft:"4px solid "+est.color,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{background:est.color,color:est.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{est.label}</span>
+          {s.hora&&<span style={{fontSize:12,color:"#888"}}>🕐 {s.hora}</span>}
+          <span style={{fontSize:11,color:"#bbb"}}>{fmtC(s.fecha)}</span>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>onEditar(s)} style={{background:"#f0f0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
+          <button onClick={()=>onBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
+        </div>
+      </div>
+
+      {/* SERVICIOS (items) */}
+      {s._items && s._items.length > 0 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+          {s._items.map(it=>(
+            <span key={it.id} style={{background:"#fde8e8",color:"#c0392b",fontSize:12,padding:"3px 10px",borderRadius:20,fontWeight:600}}>🔧 {it.nombre}</span>
+          ))}
+        </div>
+      )}
+
+      {s.cliente&&<div style={{fontSize:15,fontWeight:700,color:"#222",marginBottom:3}}>{s.cliente}</div>}
+      {s.direccion&&<div style={{fontSize:12,color:"#666",marginBottom:5}}>📍 {s.direccion}</div>}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12}}>
+        {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(x=>x[1]).map(x=>(
+          <span key={x[0]} style={{color:"#888"}}>{x[0]}: <b style={{color:"#333"}}>{x[1]}</b></span>
+        ))}
+      </div>
+
+      {s.lista_n_precio&&(
+        <div style={{marginTop:6,background:s.lista_n_cobrado?"#eafaf1":"#fef9e7",border:"1px solid "+(s.lista_n_cobrado?"#2ecc71":"#f1c40f"),borderRadius:8,padding:"6px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:12,fontWeight:700}}>💰 Lista N: ${s.lista_n_precio}</span>
+          <span style={{fontSize:11,fontWeight:700,color:s.lista_n_cobrado?"#27ae60":"#e67e22"}}>{s.lista_n_cobrado?"✅ Cobrado":"⏳ Pendiente"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function App() {
-  const [vista, setVista] = React.useState("agenda");
-  const [modo, setModo] = React.useState("dia");
-  const [fecha, setFecha] = React.useState(hoy());
-  const [items, setItems] = React.useState([]);
-  const [todos, setTodos] = React.useState([]);
-  const [listas, setListas] = React.useState({equipos:[],clientes:[],proveedores:[],operadores:[]});
-  const [cargando, setCargando] = React.useState(true);
-  const [modal, setModal] = React.useState(false);
-  const [editando, setEditando] = React.useState(null);
-  const [guardando, setGuardando] = React.useState(false);
-  const [borrar, setBorrar] = React.useState(null);
-  const [abmTab, setAbmTab] = React.useState("equipos");
-  const [nuevoItem, setNuevoItem] = React.useState("");
-  const [bTexto, setBTexto] = React.useState("");
-  const [bEstado, setBEstado] = React.useState("todos");
-  const [bDesde, setBDesde] = React.useState("");
-  const [bHasta, setBHasta] = React.useState("");
+  const [vista,setVista]=React.useState("agenda");
+  const [modo,setModo]=React.useState("dia");
+  const [fecha,setFecha]=React.useState(hoy());
+  const [items,setItems]=React.useState([]);
+  const [todos,setTodos]=React.useState([]);
+  const [listas,setListas]=React.useState({equipos:[],clientes:[],proveedores:[],operadores:[]});
+  const [cargando,setCargando]=React.useState(true);
+  const [modal,setModal]=React.useState(false);
+  const [editId,setEditId]=React.useState(null);
+  const [guardando,setGuardando]=React.useState(false);
+  const [borrar,setBorrar]=React.useState(null);
+  const [abmTab,setAbmTab]=React.useState("equipos");
+  const [nuevoAbm,setNuevoAbm]=React.useState("");
+  const [bTexto,setBTexto]=React.useState("");
+  const [bEstado,setBEstado]=React.useState("todos");
+  const [bDesde,setBDesde]=React.useState("");
+  const [bHasta,setBHasta]=React.useState("");
 
-  // Form state individual
-  const [fEstado, setFEstado] = React.useState("confirmado");
-  const [fHora, setFHora] = React.useState("");
-  const [fCliente, setFCliente] = React.useState("");
-  const [fDireccion, setFDireccion] = React.useState("");
-  const [fProveedor, setFProveedor] = React.useState("");
-  const [fNroEq, setFNroEq] = React.useState("");
-  const [fOperador, setFOperador] = React.useState("");
-  const [fRemito, setFRemito] = React.useState("");
-  const [fFactura, setFFactura] = React.useState("");
-  const [fCotizacion, setFCotizacion] = React.useState("");
-  const [fPrecio, setFPrecio] = React.useState("");
-  const [fCobrado, setFCobrado] = React.useState(false);
-  const [fFechaCobro, setFFechaCobro] = React.useState("");
-  const [fRecordatorio, setFRecordatorio] = React.useState("");
-  const [fServicios, setFServicios] = React.useState([]);
-  const [nuevoServicio, setNuevoServicio] = React.useState("");
-  const [nuevoServicioManual, setNuevoServicioManual] = React.useState("");
-  const [nuevoCliente, setNuevoCliente] = React.useState("");
-  const [nuevoProveedor, setNuevoProveedor] = React.useState("");
-  const [modoNuevoCliente, setModoNuevoCliente] = React.useState(false);
-  const [modoNuevoProveedor, setModoNuevoProveedor] = React.useState(false);
+  // Campos del formulario
+  const [fEstado,setFEstado]=React.useState("confirmado");
+  const [fHora,setFHora]=React.useState("");
+  const [fCliente,setFCliente]=React.useState("");
+  const [fDireccion,setFDireccion]=React.useState("");
+  const [fProveedor,setFProveedor]=React.useState("");
+  const [fNroEq,setFNroEq]=React.useState("");
+  const [fOperador,setFOperador]=React.useState("");
+  const [fRemito,setFRemito]=React.useState("");
+  const [fFactura,setFFactura]=React.useState("");
+  const [fCotizacion,setFCotizacion]=React.useState("");
+  const [fPrecio,setFPrecio]=React.useState("");
+  const [fCobrado,setFCobrado]=React.useState(false);
+  const [fFechaCobro,setFFechaCobro]=React.useState("");
+  const [fRecordatorio,setFRecordatorio]=React.useState("");
+  const [fServicios,setFServicios]=React.useState([]);
+  const [selServicio,setSelServicio]=React.useState("");
+  const [manualServicio,setManualServicio]=React.useState("");
+  const [nuevoCliente,setNuevoCliente]=React.useState("");
+  const [nuevoProveedor,setNuevoProveedor]=React.useState("");
+  const [modoNuevoCliente,setModoNuevoCliente]=React.useState(false);
+  const [modoNuevoProveedor,setModoNuevoProveedor]=React.useState(false);
 
-  function getRango() {
-    if (modo==="dia") return [fecha,fecha];
-    if (modo==="semana") { const s=lunSem(fecha); return [s,sumD(s,6)]; }
-    return [iniMes(fecha),finMes(fecha)];
+  function getRango(){
+    if(modo==="dia")return[fecha,fecha];
+    if(modo==="semana"){const s=lunSem(fecha);return[s,sumD(s,6)];}
+    return[iniMes(fecha),finMes(fecha)];
   }
 
-  async function cargarItems() {
+  async function recargar(){
     setCargando(true);
-    const [d1,d2]=getRango();
-    const data=await GET("servicios","?fecha=gte."+d1+"&fecha=lte."+d2+"&order=fecha,hora");
-    const lista=Array.isArray(data)?data:[];
-    const enriq=await Promise.all(lista.map(async s=>{
-      const sub=await GET("servicio_items","?servicio_id=eq."+s.id+"&order=created_at");
-      return {...s,_items:Array.isArray(sub)?sub:[]};
-    }));
-    setItems(enriq);
+    const[d1,d2]=getRango();
+    const data=await cargarServiciosConItems(d1,d2);
+    setItems(data);
     setCargando(false);
   }
 
-  async function cargarTodos() {
-    const data=await GET("servicios","?order=fecha,hora");
-    const lista=Array.isArray(data)?data:[];
-    const enriq=await Promise.all(lista.map(async s=>{
-      const sub=await GET("servicio_items","?servicio_id=eq."+s.id+"&order=created_at");
-      return {...s,_items:Array.isArray(sub)?sub:[]};
-    }));
-    setTodos(enriq);
+  async function recargarTodos(){
+    const servicios=await GET("servicios","?order=fecha,hora");
+    if(!Array.isArray(servicios)||servicios.length===0){setTodos([]);return;}
+    const ids=servicios.map(s=>s.id).join(",");
+    const todosItems=await GET("servicio_items","?servicio_id=in.("+ids+")&order=created_at");
+    const itemsMap={};
+    if(Array.isArray(todosItems)){todosItems.forEach(it=>{if(!itemsMap[it.servicio_id])itemsMap[it.servicio_id]=[];itemsMap[it.servicio_id].push(it);});}
+    setTodos(servicios.map(s=>({...s,_items:itemsMap[s.id]||[]})));
   }
 
-  async function cargarListas() {
-    const [eq,cl,pr,op]=await Promise.all([GET("equipos","?order=nombre"),GET("clientes","?order=nombre"),GET("proveedores","?order=nombre"),GET("operadores","?order=nombre")]);
+  async function recargarListas(){
+    const[eq,cl,pr,op]=await Promise.all([GET("equipos","?order=nombre"),GET("clientes","?order=nombre"),GET("proveedores","?order=nombre"),GET("operadores","?order=nombre")]);
     setListas({equipos:Array.isArray(eq)?eq:[],clientes:Array.isArray(cl)?cl:[],proveedores:Array.isArray(pr)?pr:[],operadores:Array.isArray(op)?op:[]});
   }
 
-  React.useEffect(()=>{cargarListas();},[]);
-  React.useEffect(()=>{cargarItems();},[fecha,modo]);
-  React.useEffect(()=>{if(vista==="buscar")cargarTodos();},[vista]);
+  React.useEffect(()=>{recargarListas();},[]);
+  React.useEffect(()=>{recargar();},[fecha,modo]);
+  React.useEffect(()=>{if(vista==="buscar")recargarTodos();},[vista]);
 
-  function abrirNuevo() {
-    setEditando(null);
-    setFEstado("confirmado"); setFHora(""); setFCliente(""); setFDireccion(""); setFProveedor("");
-    setFNroEq(""); setFOperador(""); setFRemito(""); setFFactura(""); setFCotizacion("");
-    setFPrecio(""); setFCobrado(false); setFFechaCobro(""); setFRecordatorio(""); setFServicios([]);
-    setNuevoServicio(""); setModoNuevoCliente(false); setModoNuevoProveedor(false);
+  function abrirNuevo(){
+    setEditId(null);
+    setFEstado("confirmado");setFHora("");setFCliente("");setFDireccion("");setFProveedor("");
+    setFNroEq("");setFOperador("");setFRemito("");setFFactura("");setFCotizacion("");
+    setFPrecio("");setFCobrado(false);setFFechaCobro("");setFRecordatorio("");
+    setFServicios([]);setSelServicio("");setManualServicio("");
+    setModoNuevoCliente(false);setModoNuevoProveedor(false);
     setModal(true);
   }
 
-  function abrirEditar(s) {
-    setEditando(s.id);
-    setFEstado(s.estado||"confirmado"); setFHora(s.hora||""); setFCliente(s.cliente||"");
-    setFDireccion(s.direccion||""); setFProveedor(s.proveedor||""); setFNroEq(s.nro_equipo||"");
-    setFOperador(s.operador||""); setFRemito(s.remito||""); setFFactura(s.factura||"");
-    setFCotizacion(s.cotizacion||""); setFPrecio(s.lista_n_precio||""); setFCobrado(s.lista_n_cobrado||false);
-    setFFechaCobro(s.lista_n_fecha_cobro||""); setFRecordatorio(s.recordatorio_texto||"");
-    setFServicios(s._items||[]); setNuevoServicio(""); setModoNuevoCliente(false); setModoNuevoProveedor(false);
+  function abrirEditar(s){
+    setEditId(s.id);
+    setFEstado(s.estado||"confirmado");setFHora(s.hora||"");setFCliente(s.cliente||"");
+    setFDireccion(s.direccion||"");setFProveedor(s.proveedor||"");setFNroEq(s.nro_equipo||"");
+    setFOperador(s.operador||"");setFRemito(s.remito||"");setFFactura(s.factura||"");
+    setFCotizacion(s.cotizacion||"");setFPrecio(s.lista_n_precio||"");setFCobrado(s.lista_n_cobrado||false);
+    setFFechaCobro(s.lista_n_fecha_cobro||"");setFRecordatorio(s.recordatorio_texto||"");
+    setFServicios(s._items?s._items.map(it=>({id:it.id,nombre:it.nombre})):[]);
+    setSelServicio("");setManualServicio("");
+    setModoNuevoCliente(false);setModoNuevoProveedor(false);
     setModal(true);
   }
 
-  function cerrarModal() { setModal(false); setEditando(null); }
+  function agregarServicioDesdeSelect(){
+    if(!selServicio) return;
+    setFServicios(prev=>[...prev,{id:"new_"+Date.now(),nombre:selServicio}]);
+    setSelServicio("");
+  }
 
-  async function guardar() {
+  function agregarServicioManual(){
+    const v=manualServicio.trim(); if(!v) return;
+    setFServicios(prev=>[...prev,{id:"new_"+Date.now(),nombre:v}]);
+    setManualServicio("");
+  }
+
+  function quitarServicio(id){
+    setFServicios(prev=>prev.filter(x=>x.id!==id));
+  }
+
+  async function guardar(){
     setGuardando(true);
-    const payload = {
-      estado: fEstado,
-      hora: fHora,
-      cliente: fCliente,
-      direccion: fDireccion,
-      proveedor: fProveedor,
-      nro_equipo: fNroEq,
-      operador: fOperador,
-      remito: fRemito,
-      factura: fFactura,
-      cotizacion: fCotizacion,
-      lista_n_precio: fPrecio,
-      lista_n_cobrado: fCobrado,
-      lista_n_fecha_cobro: fFechaCobro||null,
-      recordatorio_texto: fRecordatorio,
-      fecha: fecha
+    const payload={
+      estado:fEstado, hora:fHora, cliente:fCliente, direccion:fDireccion,
+      proveedor:fProveedor, nro_equipo:fNroEq, operador:fOperador,
+      remito:fRemito, factura:fFactura, cotizacion:fCotizacion,
+      lista_n_precio:fPrecio, lista_n_cobrado:fCobrado,
+      lista_n_fecha_cobro:fFechaCobro||null, recordatorio_texto:fRecordatorio,
+      fecha:fecha
     };
-    let sid = editando;
-    if (editando) {
-      await PATCH("servicios",editando,payload);
-      await DELWHERE("servicio_items","servicio_id",editando);
+    let sid=editId;
+    if(editId){
+      await PATCH("servicios",editId,payload);
+      await DELW("servicio_items","servicio_id",editId);
     } else {
       const res=await POST("servicios",payload);
       sid=Array.isArray(res)?res[0]?.id:res?.id;
     }
-    for (const it of fServicios) {
-      await POST("servicio_items",{servicio_id:sid,nombre:it.nombre});
+    // Guardar items de servicios
+    if(sid && fServicios.length>0){
+      for(const it of fServicios){
+        await POST("servicio_items",{servicio_id:sid,nombre:it.nombre});
+      }
     }
-    await cargarItems();
+    await recargar();
+    if(vista==="buscar") await recargarTodos();
     setGuardando(false);
-    cerrarModal();
+    setModal(false);
+    setEditId(null);
   }
 
-  async function eliminar(id) {
+  async function eliminar(id){
     await DEL("servicios",id);
-    await cargarItems();
-    if (vista==="buscar") await cargarTodos();
+    await recargar();
+    if(vista==="buscar") await recargarTodos();
     setBorrar(null);
   }
 
-  function agregarServicio() {
-    const v=nuevoServicio.trim(); if(!v) return;
-    setFServicios([...fServicios,{id:Date.now()+"",nombre:v}]);
-    setNuevoServicio("");
-  }
-
-  async function guardarNuevoCliente() {
+  async function guardarNuevoCliente(){
     const v=nuevoCliente.trim(); if(!v) return;
     await POST("clientes",{nombre:v});
-    await cargarListas();
-    setFCliente(v);
-    setNuevoCliente("");
-    setModoNuevoCliente(false);
+    await recargarListas();
+    setFCliente(v); setNuevoCliente(""); setModoNuevoCliente(false);
   }
 
-  async function guardarNuevoProveedor() {
+  async function guardarNuevoProveedor(){
     const v=nuevoProveedor.trim(); if(!v) return;
     await POST("proveedores",{nombre:v});
-    await cargarListas();
-    setFProveedor(v);
-    setNuevoProveedor("");
-    setModoNuevoProveedor(false);
+    await recargarListas();
+    setFProveedor(v); setNuevoProveedor(""); setModoNuevoProveedor(false);
   }
 
-  async function addAbm() {
-    const v=nuevoItem.trim(); if(!v) return;
-    await POST(abmTab,{nombre:v});
-    await cargarListas(); setNuevoItem("");
+  async function addAbm(){
+    const v=nuevoAbm.trim(); if(!v) return;
+    await POST(abmTab,{nombre:v}); await recargarListas(); setNuevoAbm("");
   }
-
-  async function delAbm(id) { await DEL(abmTab,id); await cargarListas(); }
+  async function delAbm(id){await DEL(abmTab,id); await recargarListas();}
 
   const porFecha={};
   items.forEach(s=>{if(!porFecha[s.fecha])porFecha[s.fecha]=[];porFecha[s.fecha].push(s);});
 
-  function getDias() {
-    if (modo==="semana"){const s=lunSem(fecha);return Array.from({length:7},(_,i)=>sumD(s,i));}
-    if (modo==="mes"){const s=iniMes(fecha),e=finMes(fecha);const d=[];let c=s;while(c<=e){d.push(c);c=sumD(c,1);}return d;}
-    return [fecha];
+  function getDias(){
+    if(modo==="semana"){const s=lunSem(fecha);return Array.from({length:7},(_,i)=>sumD(s,i));}
+    if(modo==="mes"){const s=iniMes(fecha),e=finMes(fecha),d=[];let c=s;while(c<=e){d.push(c);c=sumD(c,1);}return d;}
+    return[fecha];
   }
 
   const filtrados=todos.filter(s=>{
-    if (bEstado!=="todos"&&s.estado!==bEstado) return false;
-    if (bDesde&&s.fecha<bDesde) return false;
-    if (bHasta&&s.fecha>bHasta) return false;
-    if (bTexto){const t=bTexto.toLowerCase();return [s.cliente,s.proveedor,s.remito,s.factura,s.cotizacion,s.direccion,s.recordatorio_texto].some(v=>v&&v.toLowerCase().includes(t));}
+    if(bEstado!=="todos"&&s.estado!==bEstado) return false;
+    if(bDesde&&s.fecha<bDesde) return false;
+    if(bHasta&&s.fecha>bHasta) return false;
+    if(bTexto){const t=bTexto.toLowerCase();return[s.cliente,s.proveedor,s.remito,s.factura,s.cotizacion,s.direccion,s.recordatorio_texto].some(v=>v&&v.toLowerCase().includes(t));}
     return true;
   });
 
   const esHoy=fecha===hoy();
   const esRec=fEstado==="recordatorio";
-
-  function Tarjeta({s}) {
-    const est=getEst(s.estado);
-    if (s.estado==="recordatorio") return (
-      <div style={{background:"#ebf5fb",borderLeft:"4px solid #3498db",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{display:"flex",gap:7,alignItems:"center"}}>
-            <span style={{background:"#3498db",color:"#fff",fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>📝 Recordatorio</span>
-            <span style={{fontSize:11,color:"#aaa"}}>{fmtC(s.fecha)}</span>
-          </div>
-          <div style={{display:"flex",gap:4}}>
-            <button onClick={()=>abrirEditar(s)} style={{background:"#d6eaf8",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
-            <button onClick={()=>setBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
-          </div>
-        </div>
-        {s.recordatorio_texto&&<div style={{fontSize:14,color:"#222",marginTop:6,fontWeight:500}}>{s.recordatorio_texto}</div>}
-      </div>
-    );
-    return (
-      <div style={{background:"#fff",borderLeft:"4px solid "+est.color,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-          <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{background:est.color,color:est.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{est.label}</span>
-            {s.hora&&<span style={{fontSize:12,color:"#888"}}>🕐 {s.hora}</span>}
-            <span style={{fontSize:11,color:"#aaa"}}>{fmtC(s.fecha)}</span>
-          </div>
-          <div style={{display:"flex",gap:4}}>
-            <button onClick={()=>abrirEditar(s)} style={{background:"#f0f0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
-            <button onClick={()=>setBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
-          </div>
-        </div>
-        {s._items&&s._items.length>0&&(
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:5}}>
-            {s._items.map(it=><span key={it.id} style={{background:"#f0f0f0",color:"#333",fontSize:12,padding:"3px 9px",borderRadius:20,fontWeight:600}}>🔧 {it.nombre}</span>)}
-          </div>
-        )}
-        {s.cliente&&<div style={{fontSize:15,fontWeight:700,color:"#222",marginBottom:3}}>{s.cliente}</div>}
-        {s.direccion&&<div style={{fontSize:12,color:"#666",marginBottom:5}}>📍 {s.direccion}</div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12}}>
-          {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(x=>x[1]).map(x=>(
-            <span key={x[0]} style={{color:"#888"}}>{x[0]}: <b style={{color:"#333"}}>{x[1]}</b></span>
-          ))}
-        </div>
-        {s.lista_n_precio&&(
-          <div style={{marginTop:6,background:s.lista_n_cobrado?"#eafaf1":"#fef9e7",border:"1px solid "+(s.lista_n_cobrado?"#2ecc71":"#f1c40f"),borderRadius:8,padding:"6px 10px",display:"flex",justifyContent:"space-between"}}>
-            <span style={{fontSize:12,fontWeight:700}}>💰 Lista N: ${s.lista_n_precio}</span>
-            <span style={{fontSize:11,fontWeight:700,color:s.lista_n_cobrado?"#27ae60":"#e67e22"}}>{s.lista_n_cobrado?"✅ Cobrado":"⏳ Pendiente"}</span>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div style={{maxWidth:480,margin:"0 auto",background:"#f5f5f7",minHeight:"100vh",paddingBottom:80}}>
@@ -355,26 +375,26 @@ function App() {
           {cargando?<div style={{textAlign:"center",padding:"40px 0",color:"#aaa"}}>Cargando...</div>:(
             modo==="dia"?(
               <div>
-                {items.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14}}>No hay servicios para este día</div>:items.map(s=><Tarjeta key={s.id} s={s}/>)}
+                {items.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14}}>No hay servicios para este día</div>:items.map(s=><Tarjeta key={s.id} s={s} onEditar={abrirEditar} onBorrar={setBorrar}/>)}
               </div>
             ):(
               <div>
                 {getDias().map(dia=>{
                   const srvs=porFecha[dia]||[];
-                  return (
+                  return(
                     <div key={dia} style={{marginBottom:12}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                         <span style={{fontSize:12,fontWeight:700,color:dia===hoy()?"#e74c3c":"#555",background:"#fff",borderRadius:8,padding:"4px 10px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textTransform:"capitalize"}}>{fmtC(dia)}</span>
                         <button onClick={()=>{setFecha(dia);abrirNuevo();}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>+ Agregar</button>
                       </div>
-                      {srvs.length===0?<div style={{fontSize:12,color:"#ccc",paddingLeft:8}}>Sin servicios</div>:srvs.map(s=><Tarjeta key={s.id} s={s}/>)}
+                      {srvs.length===0?<div style={{fontSize:12,color:"#ccc",paddingLeft:8}}>Sin servicios</div>:srvs.map(s=><Tarjeta key={s.id} s={s} onEditar={abrirEditar} onBorrar={setBorrar}/>)}
                     </div>
                   );
                 })}
               </div>
             )
           )}
-          {modo==="dia"&&<button onClick={abrirNuevo} style={{...S.btnR,marginTop:8,boxShadow:"0 4px 15px rgba(231,76,60,0.3)"}}>+ Nuevo servicio</button>}
+          {modo==="dia"&&<button onClick={abrirNuevo} style={{...BTNR,marginTop:8,boxShadow:"0 4px 15px rgba(231,76,60,0.3)"}}>+ Nuevo servicio</button>}
         </div>
       )}
 
@@ -382,20 +402,20 @@ function App() {
       {vista==="buscar"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
-            <label style={S.lbl}>Buscar</label>
-            <input value={bTexto} onChange={e=>setBTexto(e.target.value)} placeholder="Cliente, remito, factura..." style={S.inp}/>
-            <label style={S.lbl}>Estado</label>
+            <label style={LBL}>Buscar</label>
+            <input value={bTexto} onChange={e=>setBTexto(e.target.value)} placeholder="Cliente, remito, factura..." style={INP}/>
+            <label style={LBL}>Estado</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
               <button onClick={()=>setBEstado("todos")} style={{background:bEstado==="todos"?"#333":"#f0f0f0",color:bEstado==="todos"?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>Todos</button>
               {ESTADOS.map(e=><button key={e.id} onClick={()=>setBEstado(e.id)} style={{background:bEstado===e.id?e.color:"#f0f0f0",color:bEstado===e.id?e.text:"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{e.label}</button>)}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <div><label style={S.lbl}>Desde</label><input type="date" value={bDesde} onChange={e=>setBDesde(e.target.value)} style={S.inp}/></div>
-              <div><label style={S.lbl}>Hasta</label><input type="date" value={bHasta} onChange={e=>setBHasta(e.target.value)} style={S.inp}/></div>
+              <div><label style={LBL}>Desde</label><input type="date" value={bDesde} onChange={e=>setBDesde(e.target.value)} style={INP}/></div>
+              <div><label style={LBL}>Hasta</label><input type="date" value={bHasta} onChange={e=>setBHasta(e.target.value)} style={INP}/></div>
             </div>
           </div>
           <div style={{fontSize:12,color:"#888",marginBottom:8}}>{filtrados.length} resultado{filtrados.length!==1?"s":""}</div>
-          {filtrados.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa"}}>Sin resultados</div>:filtrados.map(s=><Tarjeta key={s.id} s={s}/>)}
+          {filtrados.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa"}}>Sin resultados</div>:filtrados.map(s=><Tarjeta key={s.id} s={s} onEditar={abrirEditar} onBorrar={setBorrar}/>)}
         </div>
       )}
 
@@ -404,20 +424,20 @@ function App() {
         <div style={{padding:"0 12px"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
             {["equipos","clientes","proveedores","operadores"].map(t=>(
-              <button key={t} onClick={()=>{setAbmTab(t);setNuevoItem("");}} style={{padding:"11px",borderRadius:12,border:"none",background:abmTab===t?"#e74c3c":"#fff",color:abmTab===t?"#fff":"#555",cursor:"pointer",fontSize:13,fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",textTransform:"capitalize"}}>{t}</button>
+              <button key={t} onClick={()=>{setAbmTab(t);setNuevoAbm("");}} style={{padding:"11px",borderRadius:12,border:"none",background:abmTab===t?"#e74c3c":"#fff",color:abmTab===t?"#fff":"#555",cursor:"pointer",fontSize:13,fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",textTransform:"capitalize"}}>{t}</button>
             ))}
           </div>
           <div style={{marginBottom:12}}>
+            {listas[abmTab].length===0&&<div style={{textAlign:"center",padding:"20px 0",color:"#aaa",fontSize:14}}>Sin registros</div>}
             {listas[abmTab].map(it=>(
               <div key={it.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#fff",borderRadius:12,marginBottom:7,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
                 <span style={{fontSize:14,color:"#222",fontWeight:500}}>{it.nombre}</span>
                 <button onClick={()=>delAbm(it.id)} style={{background:"#fff0f0",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:20,borderRadius:8,padding:"1px 8px"}}>×</button>
               </div>
             ))}
-            {listas[abmTab].length===0&&<div style={{textAlign:"center",padding:"20px 0",color:"#aaa",fontSize:14}}>Sin registros</div>}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <input value={nuevoItem} onChange={e=>setNuevoItem(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addAbm()} placeholder={"Nuevo "+abmTab.slice(0,-1)+"..."} style={{...S.inp,marginBottom:0,flex:1}}/>
+            <input value={nuevoAbm} onChange={e=>setNuevoAbm(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addAbm()} placeholder={"Nuevo "+abmTab.slice(0,-1)+"..."} style={{...INP,marginBottom:0,flex:1}}/>
             <button onClick={addAbm} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"0 18px",fontSize:14,fontWeight:700,cursor:"pointer"}}>+</button>
           </div>
         </div>
@@ -428,11 +448,11 @@ function App() {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:100}}>
           <div style={{background:"#f5f5f7",borderRadius:"20px 20px 0 0",padding:"20px 16px",width:"100%",maxHeight:"93vh",overflowY:"auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <span style={{fontSize:17,fontWeight:700,color:"#222"}}>{editando?"Editar":"Nuevo"} {esRec?"recordatorio":"servicio"}</span>
-              <button onClick={cerrarModal} style={{background:"#e0e0e0",border:"none",fontSize:18,cursor:"pointer",borderRadius:20,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <span style={{fontSize:17,fontWeight:700,color:"#222"}}>{editId?"Editar":"Nuevo"} {esRec?"recordatorio":"servicio"}</span>
+              <button onClick={()=>setModal(false)} style={{background:"#e0e0e0",border:"none",fontSize:18,cursor:"pointer",borderRadius:20,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
 
-            <label style={S.lbl}>Tipo</label>
+            <label style={LBL}>Tipo</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
               {ESTADOS.map(e=>(
                 <button key={e.id} onClick={()=>setFEstado(e.id)} style={{background:fEstado===e.id?e.color:"#fff",color:fEstado===e.id?e.text:"#666",border:"2px solid "+e.color,borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{e.label}</button>
@@ -441,99 +461,106 @@ function App() {
 
             {esRec?(
               <div>
-                <label style={S.lbl}>Tarea / Nota</label>
-                <textarea value={fRecordatorio} onChange={e=>setFRecordatorio(e.target.value)} placeholder="Escribí la tarea o recordatorio..." rows={4} style={{...S.inp,resize:"vertical"}}/>
+                <label style={LBL}>Tarea / Nota</label>
+                <textarea value={fRecordatorio} onChange={e=>setFRecordatorio(e.target.value)} placeholder="Escribí la tarea o recordatorio..." rows={4} style={{...INP,resize:"vertical"}}/>
               </div>
             ):(
               <div>
-                <label style={S.lbl}>Hora de llegada</label>
-                <input type="time" value={fHora} onChange={e=>setFHora(e.target.value)} style={S.inp}/>
+                <label style={LBL}>Hora de llegada</label>
+                <input type="time" value={fHora} onChange={e=>setFHora(e.target.value)} style={INP}/>
 
-                <label style={S.lbl}>Servicios</label>
-                {fServicios.map(it=>(
-                  <div key={it.id} style={{display:"flex",gap:6,marginBottom:6}}>
-                    <span style={{flex:1,background:"#fff",border:"1px solid #ddd",borderRadius:9,padding:"8px 12px",fontSize:14}}>{it.nombre}</span>
-                    <button onClick={()=>setFServicios(fServicios.filter(x=>x.id!==it.id))} style={{background:"#fff0f0",border:"none",color:"#e74c3c",borderRadius:9,padding:"0 12px",cursor:"pointer",fontWeight:700}}>✕</button>
+                {/* SERVICIOS */}
+                <label style={LBL}>Servicios asignados</label>
+                {fServicios.length>0&&(
+                  <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:10,padding:"10px",marginBottom:10}}>
+                    {fServicios.map(it=>(
+                      <div key={it.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f0f0f0"}}>
+                        <span style={{fontSize:14,color:"#222",fontWeight:500}}>🔧 {it.nombre}</span>
+                        <button onClick={()=>quitarServicio(it.id)} style={{background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:18,fontWeight:700}}>×</button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-                <div style={{display:"flex",gap:6,marginBottom:10}}>
-                  <select value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
-                    <option value="">Seleccionar servicio...</option>
+                )}
+                <div style={{display:"flex",gap:6,marginBottom:6}}>
+                  <select value={selServicio} onChange={e=>setSelServicio(e.target.value)} style={{...INP,marginBottom:0,flex:1}}>
+                    <option value="">Seleccionar de la lista...</option>
                     {listas.equipos.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                   </select>
-                  <button onClick={()=>{if(nuevoServicio){setFServicios(prev=>[...prev,{id:Date.now()+"",nombre:nuevoServicio}]);setNuevoServicio("");}}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                  <button onClick={agregarServicioDesdeSelect} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 16px",fontWeight:700,cursor:"pointer",fontSize:20,flexShrink:0}}>+</button>
                 </div>
-                <div style={{display:"flex",gap:6,marginBottom:10}}>
-                  <input value={nuevoServicioManual} onChange={e=>setNuevoServicioManual(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&nuevoServicioManual.trim()){setFServicios(prev=>[...prev,{id:Date.now()+"",nombre:nuevoServicioManual.trim()}]);setNuevoServicioManual("");}}} placeholder="O escribir a mano..." style={{...S.inp,marginBottom:0,flex:1}}/>
-                  <button onClick={()=>{if(nuevoServicioManual.trim()){setFServicios(prev=>[...prev,{id:Date.now()+"",nombre:nuevoServicioManual.trim()}]);setNuevoServicioManual("");}}} style={{background:"#555",color:"#fff",border:"none",borderRadius:10,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>+</button>
+                <div style={{display:"flex",gap:6,marginBottom:14}}>
+                  <input value={manualServicio} onChange={e=>setManualServicio(e.target.value)} onKeyDown={e=>e.key==="Enter"&&agregarServicioManual()} placeholder="O escribir servicio a mano..." style={{...INP,marginBottom:0,flex:1}}/>
+                  <button onClick={agregarServicioManual} style={{background:"#777",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",flexShrink:0}}>+</button>
                 </div>
 
-                <label style={S.lbl}>Cliente</label>
+                {/* CLIENTE */}
+                <label style={LBL}>Cliente</label>
                 {modoNuevoCliente?(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
-                    <input autoFocus value={nuevoCliente} onChange={e=>setNuevoCliente(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoCliente()} placeholder="Nuevo cliente..." style={{...S.inp,marginBottom:0,flex:1}}/>
+                    <input autoFocus value={nuevoCliente} onChange={e=>setNuevoCliente(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoCliente()} placeholder="Nuevo cliente..." style={{...INP,marginBottom:0,flex:1}}/>
                     <button onClick={guardarNuevoCliente} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
                     <button onClick={()=>setModoNuevoCliente(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
                   </div>
                 ):(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
-                    <select value={fCliente} onChange={e=>setFCliente(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+                    <select value={fCliente} onChange={e=>setFCliente(e.target.value)} style={{...INP,marginBottom:0,flex:1}}>
                       <option value="">Seleccionar cliente...</option>
                       {listas.clientes.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                     </select>
-                    <button onClick={()=>setModoNuevoCliente(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                    <button onClick={()=>setModoNuevoCliente(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:20,flexShrink:0}}>+</button>
                   </div>
                 )}
 
-                <label style={S.lbl}>Dirección</label>
-                <input placeholder="Dirección de trabajo" value={fDireccion} onChange={e=>setFDireccion(e.target.value)} style={S.inp}/>
+                <label style={LBL}>Dirección</label>
+                <input placeholder="Dirección de trabajo" value={fDireccion} onChange={e=>setFDireccion(e.target.value)} style={INP}/>
 
-                <label style={S.lbl}>Proveedor</label>
+                {/* PROVEEDOR */}
+                <label style={LBL}>Proveedor</label>
                 {modoNuevoProveedor?(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
-                    <input autoFocus value={nuevoProveedor} onChange={e=>setNuevoProveedor(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoProveedor()} placeholder="Nuevo proveedor..." style={{...S.inp,marginBottom:0,flex:1}}/>
+                    <input autoFocus value={nuevoProveedor} onChange={e=>setNuevoProveedor(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoProveedor()} placeholder="Nuevo proveedor..." style={{...INP,marginBottom:0,flex:1}}/>
                     <button onClick={guardarNuevoProveedor} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
                     <button onClick={()=>setModoNuevoProveedor(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
                   </div>
                 ):(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
-                    <select value={fProveedor} onChange={e=>setFProveedor(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+                    <select value={fProveedor} onChange={e=>setFProveedor(e.target.value)} style={{...INP,marginBottom:0,flex:1}}>
                       <option value="">Seleccionar proveedor...</option>
                       {listas.proveedores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                     </select>
-                    <button onClick={()=>setModoNuevoProveedor(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                    <button onClick={()=>setModoNuevoProveedor(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:20,flexShrink:0}}>+</button>
                   </div>
                 )}
 
-                <label style={S.lbl}>N° de equipo asignado</label>
-                <input placeholder="Ej: 22, 29..." value={fNroEq} onChange={e=>setFNroEq(e.target.value)} style={S.inp}/>
+                <label style={LBL}>N° de equipo asignado</label>
+                <input placeholder="Ej: 22, 29..." value={fNroEq} onChange={e=>setFNroEq(e.target.value)} style={INP}/>
 
-                <label style={S.lbl}>Operador</label>
-                <select value={fOperador} onChange={e=>setFOperador(e.target.value)} style={S.inp}>
+                <label style={LBL}>Operador</label>
+                <select value={fOperador} onChange={e=>setFOperador(e.target.value)} style={INP}>
                   <option value="">Seleccionar...</option>
                   {listas.operadores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                 </select>
 
-                <label style={S.lbl}>N° de remito</label>
-                <input placeholder="Número de remito" value={fRemito} onChange={e=>setFRemito(e.target.value)} style={S.inp}/>
+                <label style={LBL}>N° de remito</label>
+                <input placeholder="Número de remito" value={fRemito} onChange={e=>setFRemito(e.target.value)} style={INP}/>
 
-                <label style={S.lbl}>N° de factura</label>
-                <input placeholder="Número de factura" value={fFactura} onChange={e=>setFFactura(e.target.value)} style={S.inp}/>
+                <label style={LBL}>N° de factura</label>
+                <input placeholder="Número de factura" value={fFactura} onChange={e=>setFFactura(e.target.value)} style={INP}/>
 
-                <label style={S.lbl}>N° de cotización</label>
-                <input placeholder="Número de cotización" value={fCotizacion} onChange={e=>setFCotizacion(e.target.value)} style={S.inp}/>
+                <label style={LBL}>N° de cotización</label>
+                <input placeholder="Número de cotización" value={fCotizacion} onChange={e=>setFCotizacion(e.target.value)} style={INP}/>
 
                 <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"14px",marginBottom:10}}>
                   <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:10}}>💰 Lista N</div>
-                  <label style={S.lbl}>Precio</label>
-                  <input placeholder="Ej: 15000" value={fPrecio} onChange={e=>setFPrecio(e.target.value)} style={S.inp}/>
+                  <label style={LBL}>Precio</label>
+                  <input placeholder="Ej: 15000" value={fPrecio} onChange={e=>setFPrecio(e.target.value)} style={INP}/>
                   <button onClick={()=>setFCobrado(!fCobrado)} style={{background:fCobrado?"#2ecc71":"#f0f0f0",color:fCobrado?"#fff":"#555",border:"none",borderRadius:20,padding:"8px 16px",fontSize:13,cursor:"pointer",fontWeight:700,marginBottom:10,display:"block"}}>
                     {fCobrado?"✅ Cobrado":"⏳ Pendiente"}
                   </button>
                   {fCobrado&&(
                     <div>
-                      <label style={S.lbl}>Fecha de cobro</label>
-                      <input type="date" value={fFechaCobro} onChange={e=>setFFechaCobro(e.target.value)} style={S.inp}/>
+                      <label style={LBL}>Fecha de cobro</label>
+                      <input type="date" value={fFechaCobro} onChange={e=>setFFechaCobro(e.target.value)} style={INP}/>
                     </div>
                   )}
                 </div>
@@ -541,8 +568,8 @@ function App() {
             )}
 
             <div style={{display:"flex",gap:10,marginTop:8}}>
-              <button onClick={cerrarModal} style={{...S.btnG,flex:1}}>Cancelar</button>
-              <button onClick={guardar} disabled={guardando} style={{...S.btnR,flex:2,opacity:guardando?0.7:1}}>{guardando?"Guardando...":"Guardar"}</button>
+              <button onClick={()=>setModal(false)} style={{...BTNG,flex:1}}>Cancelar</button>
+              <button onClick={guardar} disabled={guardando} style={{...BTNR,flex:2,opacity:guardando?0.7:1}}>{guardando?"Guardando...":"Guardar"}</button>
             </div>
           </div>
         </div>
@@ -555,13 +582,12 @@ function App() {
             <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Eliminar?</div>
             <div style={{fontSize:13,color:"#888",marginBottom:22}}>Esta acción no se puede deshacer.</div>
             <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setBorrar(null)} style={{...S.btnG,flex:1}}>Cancelar</button>
-              <button onClick={()=>eliminar(borrar)} style={{...S.btnR,flex:1}}>Eliminar</button>
+              <button onClick={()=>setBorrar(null)} style={{...BTNG,flex:1}}>Cancelar</button>
+              <button onClick={()=>eliminar(borrar)} style={{...BTNR,flex:1}}>Eliminar</button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

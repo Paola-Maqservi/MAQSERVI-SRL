@@ -7,7 +7,6 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; min-height: 100vh; }
-    #app { max-width: 480px; margin: 0 auto; padding-bottom: 80px; }
   </style>
 </head>
 <body>
@@ -25,8 +24,12 @@ async function sbGet(table) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=nombre`, { headers: H });
   return r.json();
 }
-async function sbGetServicios(fecha) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/servicios?fecha=eq.${fecha}&order=hora`, { headers: H });
+async function sbGetServicios(desde, hasta) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/servicios?fecha=gte.${desde}&fecha=lte.${hasta}&order=fecha,hora`, { headers: H });
+  return r.json();
+}
+async function sbGetTodos() {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/servicios?order=fecha,hora`, { headers: H });
   return r.json();
 }
 async function sbInsert(table, body) {
@@ -52,25 +55,93 @@ const ESTADOS = [
   { id: "reservado", label: "Reservado", color: "#2ecc71", text: "#222" },
 ];
 
-function pad(n) { return String(n).padStart(2, "0"); }
+function pad(n) { return String(n).padStart(2,"0"); }
 function fmtDate(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function parseDate(s) { const [y,m,d] = s.split("-"); return new Date(+y,+m-1,+d); }
-function fmtDisplay(s) { return parseDate(s).toLocaleDateString("es-AR", { weekday:"long", year:"numeric", month:"long", day:"numeric" }); }
-const estadoObj = id => ESTADOS.find(e => e.id === id) || ESTADOS[0];
-const emptyForm = () => ({ estado:"confirmado", hora:"", equipo:"", cliente:"", direccion:"", proveedor:"", nro_equipo:"", operador:"", remito:"", factura:"", cotizacion:"" });
+function parseDate(s) { const [y,m,d]=s.split("-"); return new Date(+y,+m-1,+d); }
+function fmtDisplay(s) { return parseDate(s).toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); }
+function fmtShort(s) { return parseDate(s).toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"}); }
+function addDays(s,n) { const d=parseDate(s); d.setDate(d.getDate()+n); return fmtDate(d); }
+function startOfWeek(s) { const d=parseDate(s); d.setDate(d.getDate()-d.getDay()); return fmtDate(d); }
+function startOfMonth(s) { const d=parseDate(s); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-01`; }
+function endOfMonth(s) { const d=parseDate(s); return fmtDate(new Date(d.getFullYear(),d.getMonth()+1,0)); }
 
-const inp = { width:"100%", padding:"9px 11px", fontSize:14, border:"1px solid #ddd", borderRadius:9, boxSizing:"border-box", marginBottom:9, background:"#fff", color:"#222" };
-const lbl = { fontSize:11, color:"#888", marginBottom:3, display:"block", fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 };
-const btnP = { background:"#e74c3c", color:"#fff", border:"none", borderRadius:11, padding:"13px 20px", fontSize:14, fontWeight:700, cursor:"pointer", width:"100%" };
-const btnG = { background:"transparent", color:"#555", border:"1px solid #ddd", borderRadius:11, padding:"13px 20px", fontSize:14, cursor:"pointer", width:"100%" };
+const estadoObj = id => ESTADOS.find(e=>e.id===id)||ESTADOS[0];
+const emptyForm = () => ({ estado:"confirmado",hora:"",equipo:"",cliente:"",direccion:"",proveedor:"",nro_equipo:"",operador:"",remito:"",factura:"",cotizacion:"" });
 
-const { useState, useEffect, useCallback } = React;
+const inp = { width:"100%",padding:"9px 11px",fontSize:14,border:"1px solid #ddd",borderRadius:9,boxSizing:"border-box",marginBottom:9,background:"#fff",color:"#222" };
+const lbl = { fontSize:11,color:"#888",marginBottom:3,display:"block",fontWeight:600,textTransform:"uppercase",letterSpacing:0.4 };
+const btnP = { background:"#e74c3c",color:"#fff",border:"none",borderRadius:11,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%" };
+const btnG = { background:"transparent",color:"#555",border:"1px solid #ddd",borderRadius:11,padding:"13px 20px",fontSize:14,cursor:"pointer",width:"100%" };
+
+const { useState, useEffect, useCallback, useRef } = React;
+
+// Componente selector con opción de agregar nuevo
+function SelectConAgregar({ value, onChange, opciones, placeholder, onAgregar, tipo }) {
+  const [modo, setModo] = useState("select");
+  const [nuevo, setNuevo] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function handleAgregar() {
+    const v = nuevo.trim(); if (!v) return;
+    setGuardando(true);
+    await onAgregar(v);
+    onChange(v);
+    setNuevo(""); setModo("select"); setGuardando(false);
+  }
+
+  if (modo === "nuevo") {
+    return (
+      <div style={{ display:"flex", gap:6, marginBottom:9 }}>
+        <input autoFocus value={nuevo} onChange={e=>setNuevo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAgregar()} placeholder={`Nuevo ${tipo}...`} style={{ ...inp, marginBottom:0, flex:1 }} />
+        <button onClick={handleAgregar} disabled={guardando} style={{ background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer",fontSize:13 }}>{guardando?"...":"✓"}</button>
+        <button onClick={()=>setModo("select")} style={{ background:"#eee",color:"#555",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer",fontSize:13 }}>✕</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display:"flex", gap:6, marginBottom:9 }}>
+      <select value={value} onChange={e=>onChange(e.target.value)} style={{ ...inp, marginBottom:0, flex:1 }}>
+        <option value="">{placeholder}</option>
+        {opciones.map(x=><option key={x.id||x} value={x.nombre||x}>{x.nombre||x}</option>)}
+      </select>
+      <button onClick={()=>setModo("nuevo")} title={`Agregar ${tipo}`} style={{ background:"#e74c3c",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer",fontSize:18,whiteSpace:"nowrap" }}>+</button>
+    </div>
+  );
+}
+
+function ServicioCard({ s, onEditar, onEliminar }) {
+  const est = estadoObj(s.estado);
+  return (
+    <div style={{ background:"#fff",borderLeft:`4px solid ${est.color}`,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5 }}>
+        <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
+          <span style={{ background:est.color,color:est.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700 }}>{est.label}</span>
+          {s.hora&&<span style={{ fontSize:12,color:"#888" }}>🕐 {s.hora}</span>}
+          {s.fecha&&<span style={{ fontSize:11,color:"#aaa" }}>{fmtShort(s.fecha)}</span>}
+        </div>
+        <div style={{ display:"flex",gap:4 }}>
+          <button onClick={()=>onEditar(s)} style={{ background:"#f0f0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer" }}>✏️</button>
+          <button onClick={()=>onEliminar(s.id)} style={{ background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer" }}>🗑️</button>
+        </div>
+      </div>
+      <div style={{ fontSize:15,fontWeight:700,color:"#222",marginBottom:3 }}>{[s.equipo,s.cliente].filter(Boolean).join(" · ")||"—"}</div>
+      {s.direccion&&<div style={{ fontSize:12,color:"#666",marginBottom:5 }}>📍 {s.direccion}</div>}
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12 }}>
+        {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(([,v])=>v).map(([k,v])=>(
+          <span key={k} style={{ color:"#888" }}>{k}: <b style={{ color:"#333" }}>{v}</b></span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function App() {
-  const [view, setView] = useState("calendario");
+  const [mainView, setMainView] = useState("agenda"); // agenda | buscar | abm
+  const [vistaAgenda, setVistaAgenda] = useState("dia"); // dia | semana | mes
   const [date, setDate] = useState(fmtDate(new Date()));
   const [servicios, setServicios] = useState([]);
-  const [listas, setListas] = useState({ equipos:[], clientes:[], proveedores:[], operadores:[] });
+  const [todosServicios, setTodosServicios] = useState([]);
+  const [listas, setListas] = useState({ equipos:[],clientes:[],proveedores:[],operadores:[] });
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(null);
@@ -80,28 +151,63 @@ function App() {
   const [abmTab, setAbmTab] = useState("equipos");
   const [newItem, setNewItem] = useState("");
   const [abmLoading, setAbmLoading] = useState(false);
+  // Búsqueda
+  const [busqEstado, setBusqEstado] = useState("todos");
+  const [busqTexto, setBusqTexto] = useState("");
+  const [busqDesde, setBusqDesde] = useState("");
+  const [busqHasta, setBusqHasta] = useState("");
 
-  const loadServicios = useCallback(async (f) => {
+  const getRango = useCallback(() => {
+    if (vistaAgenda === "dia") return [date, date];
+    if (vistaAgenda === "semana") { const s=startOfWeek(date); return [s, addDays(s,6)]; }
+    return [startOfMonth(date), endOfMonth(date)];
+  }, [date, vistaAgenda]);
+
+  const loadServicios = useCallback(async () => {
     setLoading(true);
-    const d = await sbGetServicios(f);
-    setServicios(Array.isArray(d) ? d : []);
+    const [desde, hasta] = getRango();
+    const d = await sbGetServicios(desde, hasta);
+    setServicios(Array.isArray(d)?d:[]);
     setLoading(false);
-  }, []);
+  }, [getRango]);
 
   const loadListas = useCallback(async () => {
     const [eq,cl,pr,op] = await Promise.all([sbGet("equipos"),sbGet("clientes"),sbGet("proveedores"),sbGet("operadores")]);
     setListas({ equipos:Array.isArray(eq)?eq:[], clientes:Array.isArray(cl)?cl:[], proveedores:Array.isArray(pr)?pr:[], operadores:Array.isArray(op)?op:[] });
   }, []);
 
+  const loadTodos = useCallback(async () => {
+    const d = await sbGetTodos();
+    setTodosServicios(Array.isArray(d)?d:[]);
+  }, []);
+
   useEffect(() => { loadListas(); }, []);
-  useEffect(() => { loadServicios(date); }, [date]);
+  useEffect(() => { loadServicios(); }, [loadServicios]);
+  useEffect(() => { if (mainView==="buscar") loadTodos(); }, [mainView]);
 
-  function prevDay() { const d=parseDate(date); d.setDate(d.getDate()-1); setDate(fmtDate(d)); }
-  function nextDay() { const d=parseDate(date); d.setDate(d.getDate()+1); setDate(fmtDate(d)); }
+  function prevPeriodo() {
+    if (vistaAgenda==="dia") setDate(addDays(date,-1));
+    else if (vistaAgenda==="semana") setDate(addDays(startOfWeek(date),-7));
+    else { const d=parseDate(date); d.setMonth(d.getMonth()-1); setDate(fmtDate(d)); }
+  }
+  function nextPeriodo() {
+    if (vistaAgenda==="dia") setDate(addDays(date,1));
+    else if (vistaAgenda==="semana") setDate(addDays(startOfWeek(date),7));
+    else { const d=parseDate(date); d.setMonth(d.getMonth()+1); setDate(fmtDate(d)); }
+  }
 
-  function openNuevo() { setForm(emptyForm()); setEditId(null); setModal("servicio"); }
+  function tituloNavegacion() {
+    if (vistaAgenda==="dia") return fmtDisplay(date);
+    if (vistaAgenda==="semana") {
+      const s=startOfWeek(date), e=addDays(s,6);
+      return `${parseDate(s).toLocaleDateString("es-AR",{day:"numeric",month:"short"})} - ${parseDate(e).toLocaleDateString("es-AR",{day:"numeric",month:"short",year:"numeric"})}`;
+    }
+    return parseDate(date).toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+  }
+
+  function openNuevo(fechaInicial) { setForm({...emptyForm()}); setEditId(null); setModal("servicio"); }
   function openEditar(s) {
-    setForm({ estado:s.estado, hora:s.hora||"", equipo:s.equipo||"", cliente:s.cliente||"", direccion:s.direccion||"", proveedor:s.proveedor||"", nro_equipo:s.nro_equipo||"", operador:s.operador||"", remito:s.remito||"", factura:s.factura||"", cotizacion:s.cotizacion||"" });
+    setForm({ estado:s.estado,hora:s.hora||"",equipo:s.equipo||"",cliente:s.cliente||"",direccion:s.direccion||"",proveedor:s.proveedor||"",nro_equipo:s.nro_equipo||"",operador:s.operador||"",remito:s.remito||"",factura:s.factura||"",cotizacion:s.cotizacion||"" });
     setEditId(s.id); setModal("servicio");
   }
 
@@ -111,20 +217,30 @@ function App() {
     const payload = { ...form, fecha: date };
     if (editId) await sbUpdate("servicios", editId, payload);
     else await sbInsert("servicios", payload);
-    await loadServicios(date);
+    await loadServicios();
     setSaving(false); setModal(null); setForm(null); setEditId(null);
   }
 
   async function deleteServicio(id) {
     await sbDelete("servicios", id);
-    await loadServicios(date);
+    await loadServicios();
+    if (mainView==="buscar") await loadTodos();
     setConfirmDel(null);
   }
 
+  async function agregarCliente(nombre) {
+    await sbInsert("clientes", { nombre });
+    await loadListas();
+  }
+  async function agregarProveedor(nombre) {
+    await sbInsert("proveedores", { nombre });
+    await loadListas();
+  }
+
   async function addAbm() {
-    const v = newItem.trim(); if (!v) return;
+    const v=newItem.trim(); if(!v) return;
     setAbmLoading(true);
-    await sbInsert(abmTab, { nombre: v });
+    await sbInsert(abmTab, { nombre:v });
     await loadListas(); setNewItem(""); setAbmLoading(false);
   }
   async function removeAbm(id) {
@@ -133,159 +249,242 @@ function App() {
     await loadListas(); setAbmLoading(false);
   }
 
+  // Filtrar búsqueda
+  const serviciosFiltrados = todosServicios.filter(s => {
+    if (busqEstado !== "todos" && s.estado !== busqEstado) return false;
+    if (busqDesde && s.fecha < busqDesde) return false;
+    if (busqHasta && s.fecha > busqHasta) return false;
+    if (busqTexto) {
+      const t = busqTexto.toLowerCase();
+      return [s.cliente,s.equipo,s.proveedor,s.operador,s.remito,s.factura,s.cotizacion,s.direccion].some(v=>v&&v.toLowerCase().includes(t));
+    }
+    return true;
+  });
+
+  // Agrupar por fecha para vista semana/mes
+  const serviciosPorFecha = {};
+  servicios.forEach(s => {
+    if (!serviciosPorFecha[s.fecha]) serviciosPorFecha[s.fecha] = [];
+    serviciosPorFecha[s.fecha].push(s);
+  });
+
   const isToday = date === fmtDate(new Date());
 
+  // Días de la semana/mes para vista
+  function getDias() {
+    if (vistaAgenda === "semana") {
+      const s = startOfWeek(date);
+      return Array.from({length:7}, (_,i) => addDays(s,i));
+    }
+    if (vistaAgenda === "mes") {
+      const s = startOfMonth(date), e = endOfMonth(date);
+      const dias = [];
+      let cur = s;
+      while (cur <= e) { dias.push(cur); cur = addDays(cur,1); }
+      return dias;
+    }
+    return [date];
+  }
+
   return (
-    <div id="app">
+    <div style={{ maxWidth:480,margin:"0 auto",background:"#f5f5f7",minHeight:"100vh",paddingBottom:80 }}>
+
       {/* Header */}
-      <div style={{ background:"linear-gradient(135deg,#e74c3c,#c0392b)", color:"#fff", padding:"18px 16px 14px", borderRadius:"0 0 20px 20px", marginBottom:16, boxShadow:"0 4px 20px rgba(231,76,60,0.3)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      <div style={{ background:"linear-gradient(135deg,#e74c3c,#c0392b)",color:"#fff",padding:"16px 14px 12px",borderRadius:"0 0 20px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(231,76,60,0.3)" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
           <div>
-            <div style={{ fontSize:20, fontWeight:700 }}>MAAQSERVI</div>
-            <div style={{ fontSize:12, opacity:0.8, marginTop:1 }}>Gestión de Alquileres</div>
+            <div style={{ fontSize:20,fontWeight:700 }}>MAAQSERVI</div>
+            <div style={{ fontSize:11,opacity:0.8 }}>Gestión de Alquileres</div>
           </div>
-          <div style={{ display:"flex", gap:6 }}>
-            {["calendario","abm"].map(v => (
-              <button key={v} onClick={() => setView(v)} style={{ background:view===v?"rgba(255,255,255,0.25)":"transparent", color:"#fff", border:"1px solid rgba(255,255,255,0.3)", borderRadius:10, padding:"7px 13px", fontSize:12, cursor:"pointer", fontWeight:view===v?700:400 }}>
-                {v==="calendario" ? "📅 Agenda" : "⚙️ Listas"}
-              </button>
+          <div style={{ display:"flex",gap:5 }}>
+            {[["agenda","📅"],["buscar","🔍"],["abm","⚙️"]].map(([v,ic])=>(
+              <button key={v} onClick={()=>setMainView(v)} style={{ background:mainView===v?"rgba(255,255,255,0.28)":"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 11px",fontSize:13,cursor:"pointer",fontWeight:mainView===v?700:400 }}>{ic}</button>
             ))}
           </div>
         </div>
+        {mainView==="agenda" && (
+          <div style={{ display:"flex",gap:6 }}>
+            {["dia","semana","mes"].map(v=>(
+              <button key={v} onClick={()=>setVistaAgenda(v)} style={{ background:vistaAgenda===v?"rgba(255,255,255,0.28)":"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 12px",fontSize:12,cursor:"pointer",fontWeight:vistaAgenda===v?700:400,textTransform:"capitalize",flex:1 }}>{v}</button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {view === "calendario" && (
+      {/* AGENDA */}
+      {mainView==="agenda" && (
         <div style={{ padding:"0 12px" }}>
-          {/* Navegación fecha */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12, background:"#fff", borderRadius:14, padding:"10px 14px", boxShadow:"0 1px 6px rgba(0,0,0,0.07)" }}>
-            <button onClick={prevDay} style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:"#333" }}>‹</button>
-            <div style={{ textAlign:"center", flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:"#222", textTransform:"capitalize" }}>{fmtDisplay(date)}</div>
-              {!isToday && <button onClick={() => setDate(fmtDate(new Date()))} style={{ background:"none", border:"none", color:"#e74c3c", fontSize:11, cursor:"pointer", marginTop:2, fontWeight:600 }}>← Hoy</button>}
+          {/* Navegación */}
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,background:"#fff",borderRadius:14,padding:"10px 14px",boxShadow:"0 1px 6px rgba(0,0,0,0.07)" }}>
+            <button onClick={prevPeriodo} style={{ background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333" }}>‹</button>
+            <div style={{ textAlign:"center",flex:1 }}>
+              <div style={{ fontSize:12,fontWeight:600,color:"#222",textTransform:"capitalize" }}>{tituloNavegacion()}</div>
+              {!isToday && <button onClick={()=>setDate(fmtDate(new Date()))} style={{ background:"none",border:"none",color:"#e74c3c",fontSize:11,cursor:"pointer",fontWeight:600 }}>← Hoy</button>}
             </div>
-            <button onClick={nextDay} style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:"#333" }}>›</button>
+            <button onClick={nextPeriodo} style={{ background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333" }}>›</button>
           </div>
 
           {/* Leyenda */}
-          <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:12 }}>
-            {ESTADOS.map(e => <span key={e.id} style={{ background:e.color, color:e.text, fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:700 }}>{e.label}</span>)}
+          <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginBottom:10 }}>
+            {ESTADOS.map(e=><span key={e.id} style={{ background:e.color,color:e.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700 }}>{e.label}</span>)}
           </div>
 
-          {/* Servicios */}
-          {loading ? (
-            <div style={{ textAlign:"center", padding:"40px 0", color:"#aaa" }}>Cargando...</div>
-          ) : servicios.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"40px 0", color:"#aaa", fontSize:14 }}>No hay servicios para este día</div>
-          ) : servicios.map(s => {
-            const est = estadoObj(s.estado);
-            return (
-              <div key={s.id} style={{ background:"#fff", borderLeft:`4px solid ${est.color}`, borderRadius:12, padding:"12px 14px", marginBottom:10, boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                    <span style={{ background:est.color, color:est.text, fontSize:10, padding:"3px 9px", borderRadius:20, fontWeight:700 }}>{est.label}</span>
-                    {s.hora && <span style={{ fontSize:12, color:"#888" }}>🕐 {s.hora}</span>}
+          {loading ? <div style={{ textAlign:"center",padding:"40px 0",color:"#aaa" }}>Cargando...</div> : (
+            vistaAgenda === "dia" ? (
+              <>
+                {servicios.length===0 ? <div style={{ textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14 }}>No hay servicios para este día</div>
+                  : servicios.map(s=><ServicioCard key={s.id} s={s} onEditar={openEditar} onEliminar={setConfirmDel}/>)}
+              </>
+            ) : (
+              getDias().map(dia => {
+                const srvs = serviciosPorFecha[dia] || [];
+                return (
+                  <div key={dia} style={{ marginBottom:12 }}>
+                    <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
+                      <div style={{ fontSize:12,fontWeight:700,color:dia===fmtDate(new Date())?"#e74c3c":"#555",textTransform:"capitalize",background:"#fff",borderRadius:8,padding:"4px 10px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
+                        {fmtShort(dia)}
+                      </div>
+                      <button onClick={()=>{setDate(dia);openNuevo();}} style={{ background:"#e74c3c",color:"#fff",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:700 }}>+ Agregar</button>
+                    </div>
+                    {srvs.length===0 ? <div style={{ fontSize:12,color:"#ccc",paddingLeft:8,marginBottom:4 }}>Sin servicios</div>
+                      : srvs.map(s=><ServicioCard key={s.id} s={s} onEditar={openEditar} onEliminar={setConfirmDel}/>)}
                   </div>
-                  <div style={{ display:"flex", gap:4 }}>
-                    <button onClick={() => openEditar(s)} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>✏️</button>
-                    <button onClick={() => setConfirmDel(s.id)} style={{ background:"#fff0f0", border:"none", borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>🗑️</button>
-                  </div>
-                </div>
-                <div style={{ fontSize:15, fontWeight:700, color:"#222", marginBottom:3 }}>{[s.equipo,s.cliente].filter(Boolean).join(" · ") || "—"}</div>
-                {s.direccion && <div style={{ fontSize:12, color:"#666", marginBottom:5 }}>📍 {s.direccion}</div>}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 14px", fontSize:12 }}>
-                  {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(([,v])=>v).map(([k,v])=>(
-                    <span key={k} style={{ color:"#888" }}>{k}: <b style={{ color:"#333" }}>{v}</b></span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          <button onClick={openNuevo} style={{ ...btnP, marginTop:8, padding:"15px", fontSize:15, borderRadius:14, boxShadow:"0 4px 15px rgba(231,76,60,0.3)" }}>+ Nuevo servicio</button>
+                );
+              })
+            )
+          )}
+          {vistaAgenda==="dia" && <button onClick={openNuevo} style={{ ...btnP,marginTop:6,padding:"14px",fontSize:15,borderRadius:14,boxShadow:"0 4px 15px rgba(231,76,60,0.3)" }}>+ Nuevo servicio</button>}
         </div>
       )}
 
-      {view === "abm" && (
+      {/* BÚSQUEDA */}
+      {mainView==="buscar" && (
         <div style={{ padding:"0 12px" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
-            {["equipos","clientes","proveedores","operadores"].map(t => (
-              <button key={t} onClick={() => { setAbmTab(t); setNewItem(""); }} style={{ padding:"11px", borderRadius:12, border:"none", background:abmTab===t?"#e74c3c":"#fff", color:abmTab===t?"#fff":"#555", cursor:"pointer", fontSize:13, fontWeight:700, boxShadow:"0 1px 4px rgba(0,0,0,0.08)", textTransform:"capitalize" }}>
-                {t}
-              </button>
+          <div style={{ background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 6px rgba(0,0,0,0.07)" }}>
+            <label style={lbl}>Buscar texto</label>
+            <input value={busqTexto} onChange={e=>setBusqTexto(e.target.value)} placeholder="Cliente, equipo, remito, factura..." style={{ ...inp }} />
+
+            <label style={lbl}>Estado</label>
+            <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:10 }}>
+              <button onClick={()=>setBusqEstado("todos")} style={{ background:busqEstado==="todos"?"#333":"#f0f0f0",color:busqEstado==="todos"?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700 }}>Todos</button>
+              {ESTADOS.map(e=>(
+                <button key={e.id} onClick={()=>setBusqEstado(e.id)} style={{ background:busqEstado===e.id?e.color:"#f0f0f0",color:busqEstado===e.id?e.text:"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700 }}>{e.label}</button>
+              ))}
+            </div>
+
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+              <div>
+                <label style={lbl}>Desde</label>
+                <input type="date" value={busqDesde} onChange={e=>setBusqDesde(e.target.value)} style={inp} />
+              </div>
+              <div>
+                <label style={lbl}>Hasta</label>
+                <input type="date" value={busqHasta} onChange={e=>setBusqHasta(e.target.value)} style={inp} />
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize:12,color:"#888",marginBottom:8,paddingLeft:4 }}>{serviciosFiltrados.length} resultado{serviciosFiltrados.length!==1?"s":""}</div>
+
+          {serviciosFiltrados.length===0 ? (
+            <div style={{ textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14 }}>No se encontraron servicios</div>
+          ) : serviciosFiltrados.map(s=><ServicioCard key={s.id} s={s} onEditar={openEditar} onEliminar={setConfirmDel}/>)}
+        </div>
+      )}
+
+      {/* ABM */}
+      {mainView==="abm" && (
+        <div style={{ padding:"0 12px" }}>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14 }}>
+            {["equipos","clientes","proveedores","operadores"].map(t=>(
+              <button key={t} onClick={()=>{setAbmTab(t);setNewItem("");}} style={{ padding:"11px",borderRadius:12,border:"none",background:abmTab===t?"#e74c3c":"#fff",color:abmTab===t?"#fff":"#555",cursor:"pointer",fontSize:13,fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",textTransform:"capitalize" }}>{t}</button>
             ))}
           </div>
           <div style={{ marginBottom:12 }}>
-            {listas[abmTab].length === 0 && !abmLoading && <div style={{ textAlign:"center", padding:"20px 0", color:"#aaa", fontSize:14 }}>No hay {abmTab} cargados</div>}
-            {listas[abmTab].map(item => (
-              <div key={item.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 14px", background:"#fff", borderRadius:12, marginBottom:7, boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
-                <span style={{ fontSize:14, color:"#222", fontWeight:500 }}>{item.nombre}</span>
-                <button onClick={() => removeAbm(item.id)} style={{ background:"#fff0f0", border:"none", color:"#e74c3c", cursor:"pointer", fontSize:20, borderRadius:8, padding:"1px 8px" }}>×</button>
+            {listas[abmTab].length===0&&!abmLoading&&<div style={{ textAlign:"center",padding:"20px 0",color:"#aaa",fontSize:14 }}>No hay {abmTab} cargados</div>}
+            {listas[abmTab].map(item=>(
+              <div key={item.id} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#fff",borderRadius:12,marginBottom:7,boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
+                <span style={{ fontSize:14,color:"#222",fontWeight:500 }}>{item.nombre}</span>
+                <button onClick={()=>removeAbm(item.id)} style={{ background:"#fff0f0",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:20,borderRadius:8,padding:"1px 8px" }}>×</button>
               </div>
             ))}
           </div>
-          <div style={{ display:"flex", gap:8 }}>
-            <input value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => e.key==="Enter" && addAbm()} placeholder={`Nuevo ${abmTab.slice(0,-1)}...`} style={{ ...inp, marginBottom:0, flex:1, borderRadius:12 }} />
-            <button onClick={addAbm} disabled={abmLoading} style={{ background:"#e74c3c", color:"#fff", border:"none", borderRadius:12, padding:"0 18px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-              {abmLoading ? "..." : "Agregar"}
-            </button>
+          <div style={{ display:"flex",gap:8 }}>
+            <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addAbm()} placeholder={`Nuevo ${abmTab.slice(0,-1)}...`} style={{ ...inp,marginBottom:0,flex:1,borderRadius:12 }} />
+            <button onClick={addAbm} disabled={abmLoading} style={{ background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"0 18px",fontSize:14,fontWeight:700,cursor:"pointer" }}>{abmLoading?"...":"Agregar"}</button>
           </div>
         </div>
       )}
 
-      {/* Modal servicio */}
-      {modal === "servicio" && form && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end", zIndex:100 }}>
-          <div style={{ background:"#f5f5f7", borderRadius:"20px 20px 0 0", padding:"20px 16px", width:"100%", maxHeight:"92vh", overflowY:"auto" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-              <span style={{ fontSize:17, fontWeight:700, color:"#222" }}>{editId ? "Editar servicio" : "Nuevo servicio"}</span>
-              <button onClick={() => { setModal(null); setForm(null); setEditId(null); }} style={{ background:"#e0e0e0", border:"none", fontSize:16, cursor:"pointer", borderRadius:20, width:30, height:30 }}>×</button>
+      {/* MODAL SERVICIO */}
+      {modal==="servicio" && form && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:100 }}>
+          <div style={{ background:"#f5f5f7",borderRadius:"20px 20px 0 0",padding:"20px 16px",width:"100%",maxHeight:"92vh",overflowY:"auto" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+              <span style={{ fontSize:17,fontWeight:700,color:"#222" }}>{editId?"Editar servicio":"Nuevo servicio"}</span>
+              <button onClick={()=>{setModal(null);setForm(null);setEditId(null);}} style={{ background:"#e0e0e0",border:"none",fontSize:16,cursor:"pointer",borderRadius:20,width:30,height:30 }}>×</button>
             </div>
+
             <label style={lbl}>Estado</label>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
-              {ESTADOS.map(e => (
-                <button key={e.id} onClick={() => setForm(f => ({ ...f, estado:e.id }))} style={{ background:form.estado===e.id?e.color:"#fff", color:form.estado===e.id?e.text:"#666", border:`2px solid ${e.color}`, borderRadius:20, padding:"5px 13px", fontSize:12, cursor:"pointer", fontWeight:700 }}>{e.label}</button>
+            <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:14 }}>
+              {ESTADOS.map(e=>(
+                <button key={e.id} onClick={()=>setForm(f=>({...f,estado:e.id}))} style={{ background:form.estado===e.id?e.color:"#fff",color:form.estado===e.id?e.text:"#666",border:`2px solid ${e.color}`,borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700 }}>{e.label}</button>
               ))}
             </div>
-            {[
-              ["hora","Hora de llegada","time",null],
-              ["equipo","Equipo","select","equipos"],
-              ["cliente","Cliente","select","clientes"],
-              ["direccion","Dirección","text",null],
-              ["proveedor","Proveedor","select","proveedores"],
-              ["nro_equipo","N° de equipo asignado","text",null],
-              ["operador","Operador","select","operadores"],
-              ["remito","N° de remito","text",null],
-              ["factura","N° de factura","text",null],
-              ["cotizacion","N° de cotización","text",null],
-            ].map(([key,lbl2,type,listKey]) => (
-              <div key={key}>
-                <label style={lbl}>{lbl2}</label>
-                {type==="select" ? (
-                  <select value={form[key]} onChange={e => setForm(f => ({ ...f, [key]:e.target.value }))} style={inp}>
-                    <option value="">Seleccionar...</option>
-                    {listas[listKey]&&listas[listKey].map(x => <option key={x.id} value={x.nombre}>{x.nombre}</option>)}
-                  </select>
-                ) : (
-                  <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]:e.target.value }))} style={inp} />
-                )}
-              </div>
-            ))}
-            <div style={{ display:"flex", gap:10, marginTop:8 }}>
-              <button onClick={() => { setModal(null); setForm(null); setEditId(null); }} style={{ ...btnG, flex:1 }}>Cancelar</button>
-              <button onClick={saveServicio} disabled={saving} style={{ ...btnP, flex:2, opacity:saving?0.7:1 }}>{saving?"Guardando...":"Guardar"}</button>
+
+            <label style={lbl}>Hora de llegada</label>
+            <input type="time" value={form.hora} onChange={e=>setForm(f=>({...f,hora:e.target.value}))} style={inp} />
+
+            <label style={lbl}>Equipo</label>
+            <select value={form.equipo} onChange={e=>setForm(f=>({...f,equipo:e.target.value}))} style={inp}>
+              <option value="">Seleccionar...</option>
+              {listas.equipos.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
+            </select>
+
+            <label style={lbl}>Cliente</label>
+            <SelectConAgregar value={form.cliente} onChange={v=>setForm(f=>({...f,cliente:v}))} opciones={listas.clientes} placeholder="Seleccionar cliente..." onAgregar={agregarCliente} tipo="cliente" />
+
+            <label style={lbl}>Dirección</label>
+            <input placeholder="Dirección de trabajo" value={form.direccion} onChange={e=>setForm(f=>({...f,direccion:e.target.value}))} style={inp} />
+
+            <label style={lbl}>Proveedor</label>
+            <SelectConAgregar value={form.proveedor} onChange={v=>setForm(f=>({...f,proveedor:v}))} opciones={listas.proveedores} placeholder="Seleccionar proveedor..." onAgregar={agregarProveedor} tipo="proveedor" />
+
+            <label style={lbl}>N° de equipo asignado</label>
+            <input placeholder="Ej: 22, 29..." value={form.nro_equipo} onChange={e=>setForm(f=>({...f,nro_equipo:e.target.value}))} style={inp} />
+
+            <label style={lbl}>Operador</label>
+            <select value={form.operador} onChange={e=>setForm(f=>({...f,operador:e.target.value}))} style={inp}>
+              <option value="">Seleccionar...</option>
+              {listas.operadores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
+            </select>
+
+            <label style={lbl}>N° de remito</label>
+            <input placeholder="Número de remito" value={form.remito} onChange={e=>setForm(f=>({...f,remito:e.target.value}))} style={inp} />
+
+            <label style={lbl}>N° de factura</label>
+            <input placeholder="Número de factura" value={form.factura} onChange={e=>setForm(f=>({...f,factura:e.target.value}))} style={inp} />
+
+            <label style={lbl}>N° de cotización</label>
+            <input placeholder="Número de cotización" value={form.cotizacion} onChange={e=>setForm(f=>({...f,cotizacion:e.target.value}))} style={inp} />
+
+            <div style={{ display:"flex",gap:10,marginTop:8 }}>
+              <button onClick={()=>{setModal(null);setForm(null);setEditId(null);}} style={{ ...btnG,flex:1 }}>Cancelar</button>
+              <button onClick={saveServicio} disabled={saving} style={{ ...btnP,flex:2,opacity:saving?0.7:1 }}>{saving?"Guardando...":"Guardar"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confirm delete */}
+      {/* CONFIRM DELETE */}
       {confirmDel && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:24 }}>
-          <div style={{ background:"#fff", borderRadius:18, padding:24, width:"100%", maxWidth:320 }}>
-            <div style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>¿Eliminar servicio?</div>
-            <div style={{ fontSize:13, color:"#888", marginBottom:22 }}>Esta acción no se puede deshacer.</div>
-            <div style={{ display:"flex", gap:10 }}>
-              <button onClick={() => setConfirmDel(null)} style={{ ...btnG, flex:1 }}>Cancelar</button>
-              <button onClick={() => deleteServicio(confirmDel)} style={{ ...btnP, flex:1 }}>Eliminar</button>
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:24 }}>
+          <div style={{ background:"#fff",borderRadius:18,padding:24,width:"100%",maxWidth:320 }}>
+            <div style={{ fontSize:16,fontWeight:700,marginBottom:8 }}>¿Eliminar servicio?</div>
+            <div style={{ fontSize:13,color:"#888",marginBottom:22 }}>Esta acción no se puede deshacer.</div>
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={()=>setConfirmDel(null)} style={{ ...btnG,flex:1 }}>Cancelar</button>
+              <button onClick={()=>deleteServicio(confirmDel)} style={{ ...btnP,flex:1 }}>Eliminar</button>
             </div>
           </div>
         </div>

@@ -278,8 +278,15 @@ function App() {
     if (!form) return;
     setSaving(true);
     var items=form.servicios_items;
-    var payload=Object.assign({},form,{fecha:date});
-    delete payload.servicios_items;
+    var payload={
+      estado:form.estado, hora:form.hora, cliente:form.cliente,
+      direccion:form.direccion, proveedor:form.proveedor,
+      nro_equipo:form.nro_equipo, operador:form.operador,
+      remito:form.remito, factura:form.factura, cotizacion:form.cotizacion,
+      lista_n_precio:form.lista_n_precio, lista_n_cobrado:form.lista_n_cobrado,
+      lista_n_fecha_cobro:form.lista_n_fecha_cobro,
+      recordatorio_texto:form.recordatorio_texto, fecha:date
+    };
     var servicioId=editId;
     if (editId) {
       await sbUpdate("servicios",editId,payload);

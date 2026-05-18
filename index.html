@@ -25,7 +25,6 @@ async function GET(t,q){const r=await fetch(SB+"/rest/v1/"+t+(q||""),{headers:HD
 async function POST(t,b){const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)});return r.json();}
 async function PATCH(t,id,b){await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"PATCH",headers:HD,body:JSON.stringify(b)});}
 async function DEL(t,id){await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"DELETE",headers:HD});}
-async function DELW(t,f,v){await fetch(SB+"/rest/v1/"+t+"?"+f+"=eq."+v,{method:"DELETE",headers:HD});}
 
 const ESTADOS=[
   {id:"confirmado",label:"Confirmado",color:"#e74c3c",text:"#fff"},
@@ -43,35 +42,21 @@ function fmtC(s){return pD(s).toLocaleDateString("es-AR",{weekday:"short",day:"n
 function sumD(s,n){const d=pD(s);d.setDate(d.getDate()+n);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 function lunSem(s){const d=pD(s);d.setDate(d.getDate()-d.getDay());return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 function iniMes(s){const d=pD(s);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-01";}
-function finMes(s){const d=pD(s);return new Date(pD(s).getFullYear(),pD(s).getMonth()+1,0).toISOString().split("T")[0];}
+function finMes(s){const d=pD(s);return new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().split("T")[0];}
 function getEst(id){return ESTADOS.find(e=>e.id===id)||ESTADOS[0];}
+function parseSrvs(txt){if(!txt||txt.trim()==="")return[];return txt.split("||").map(s=>s.trim()).filter(Boolean);}
+function joinSrvs(arr){return arr.join("||");}
 
 const INP={width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",borderRadius:10,boxSizing:"border-box",marginBottom:10,background:"#fff",color:"#222"};
 const LBL={fontSize:11,color:"#888",marginBottom:4,display:"block",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5};
 const BTNR={background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%"};
 const BTNG={background:"#fff",color:"#555",border:"1px solid #ddd",borderRadius:12,padding:"14px",fontSize:15,cursor:"pointer",width:"100%"};
 
-// Carga todos los servicios de un rango con sus items en una sola llamada eficiente
-async function cargarServiciosConItems(desde, hasta) {
-  const servicios = await GET("servicios","?fecha=gte."+desde+"&fecha=lte."+hasta+"&order=fecha,hora");
-  if (!Array.isArray(servicios) || servicios.length === 0) return [];
-  
-  // Cargar todos los items de una vez
-  const ids = servicios.map(s=>s.id).join(",");
-  const todosItems = await GET("servicio_items","?servicio_id=in.("+ids+")&order=created_at");
-  const itemsMap = {};
-  if (Array.isArray(todosItems)) {
-    todosItems.forEach(it=>{
-      if (!itemsMap[it.servicio_id]) itemsMap[it.servicio_id]=[];
-      itemsMap[it.servicio_id].push(it);
-    });
-  }
-  return servicios.map(s=>({...s, _items: itemsMap[s.id]||[]}));
-}
-
 function Tarjeta({s, onEditar, onBorrar}) {
-  const est = getEst(s.estado);
-  if (s.estado==="recordatorio") return (
+  const est=getEst(s.estado);
+  const srvs=parseSrvs(s.servicios_lista);
+
+  if(s.estado==="recordatorio") return (
     <div style={{background:"#ebf5fb",borderLeft:"4px solid #3498db",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{display:"flex",gap:7,alignItems:"center"}}>
@@ -101,11 +86,10 @@ function Tarjeta({s, onEditar, onBorrar}) {
         </div>
       </div>
 
-      {/* SERVICIOS (items) */}
-      {s._items && s._items.length > 0 && (
+      {srvs.length>0&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
-          {s._items.map(it=>(
-            <span key={it.id} style={{background:"#fde8e8",color:"#c0392b",fontSize:12,padding:"3px 10px",borderRadius:20,fontWeight:600}}>🔧 {it.nombre}</span>
+          {srvs.map((srv,i)=>(
+            <span key={i} style={{background:"#fde8e8",color:"#c0392b",fontSize:12,padding:"3px 10px",borderRadius:20,fontWeight:600}}>🔧 {srv}</span>
           ))}
         </div>
       )}
@@ -148,7 +132,6 @@ function App() {
   const [bDesde,setBDesde]=React.useState("");
   const [bHasta,setBHasta]=React.useState("");
 
-  // Campos del formulario
   const [fEstado,setFEstado]=React.useState("confirmado");
   const [fHora,setFHora]=React.useState("");
   const [fCliente,setFCliente]=React.useState("");
@@ -164,12 +147,12 @@ function App() {
   const [fFechaCobro,setFFechaCobro]=React.useState("");
   const [fRecordatorio,setFRecordatorio]=React.useState("");
   const [fServicios,setFServicios]=React.useState([]);
-  const [selServicio,setSelServicio]=React.useState("");
-  const [manualServicio,setManualServicio]=React.useState("");
+  const [selSrv,setSelSrv]=React.useState("");
+  const [manualSrv,setManualSrv]=React.useState("");
   const [nuevoCliente,setNuevoCliente]=React.useState("");
-  const [nuevoProveedor,setNuevoProveedor]=React.useState("");
-  const [modoNuevoCliente,setModoNuevoCliente]=React.useState(false);
-  const [modoNuevoProveedor,setModoNuevoProveedor]=React.useState(false);
+  const [nuevoProv,setNuevoProv]=React.useState("");
+  const [modoNuevoCli,setModoNuevoCli]=React.useState(false);
+  const [modoNuevoProv,setModoNuevoProv]=React.useState(false);
 
   function getRango(){
     if(modo==="dia")return[fecha,fecha];
@@ -180,19 +163,14 @@ function App() {
   async function recargar(){
     setCargando(true);
     const[d1,d2]=getRango();
-    const data=await cargarServiciosConItems(d1,d2);
-    setItems(data);
+    const data=await GET("servicios","?fecha=gte."+d1+"&fecha=lte."+d2+"&order=fecha,hora");
+    setItems(Array.isArray(data)?data:[]);
     setCargando(false);
   }
 
   async function recargarTodos(){
-    const servicios=await GET("servicios","?order=fecha,hora");
-    if(!Array.isArray(servicios)||servicios.length===0){setTodos([]);return;}
-    const ids=servicios.map(s=>s.id).join(",");
-    const todosItems=await GET("servicio_items","?servicio_id=in.("+ids+")&order=created_at");
-    const itemsMap={};
-    if(Array.isArray(todosItems)){todosItems.forEach(it=>{if(!itemsMap[it.servicio_id])itemsMap[it.servicio_id]=[];itemsMap[it.servicio_id].push(it);});}
-    setTodos(servicios.map(s=>({...s,_items:itemsMap[s.id]||[]})));
+    const data=await GET("servicios","?order=fecha,hora");
+    setTodos(Array.isArray(data)?data:[]);
   }
 
   async function recargarListas(){
@@ -209,8 +187,8 @@ function App() {
     setFEstado("confirmado");setFHora("");setFCliente("");setFDireccion("");setFProveedor("");
     setFNroEq("");setFOperador("");setFRemito("");setFFactura("");setFCotizacion("");
     setFPrecio("");setFCobrado(false);setFFechaCobro("");setFRecordatorio("");
-    setFServicios([]);setSelServicio("");setManualServicio("");
-    setModoNuevoCliente(false);setModoNuevoProveedor(false);
+    setFServicios([]);setSelSrv("");setManualSrv("");
+    setModoNuevoCli(false);setModoNuevoProv(false);
     setModal(true);
   }
 
@@ -221,26 +199,21 @@ function App() {
     setFOperador(s.operador||"");setFRemito(s.remito||"");setFFactura(s.factura||"");
     setFCotizacion(s.cotizacion||"");setFPrecio(s.lista_n_precio||"");setFCobrado(s.lista_n_cobrado||false);
     setFFechaCobro(s.lista_n_fecha_cobro||"");setFRecordatorio(s.recordatorio_texto||"");
-    setFServicios(s._items?s._items.map(it=>({id:it.id,nombre:it.nombre})):[]);
-    setSelServicio("");setManualServicio("");
-    setModoNuevoCliente(false);setModoNuevoProveedor(false);
+    setFServicios(parseSrvs(s.servicios_lista));
+    setSelSrv("");setManualSrv("");setModoNuevoCli(false);setModoNuevoProv(false);
     setModal(true);
   }
 
-  function agregarServicioDesdeSelect(){
-    if(!selServicio) return;
-    setFServicios(prev=>[...prev,{id:"new_"+Date.now(),nombre:selServicio}]);
-    setSelServicio("");
+  function agregarSrvSelect(){
+    if(!selSrv) return;
+    if(!fServicios.includes(selSrv)) setFServicios(prev=>[...prev,selSrv]);
+    setSelSrv("");
   }
 
-  function agregarServicioManual(){
-    const v=manualServicio.trim(); if(!v) return;
-    setFServicios(prev=>[...prev,{id:"new_"+Date.now(),nombre:v}]);
-    setManualServicio("");
-  }
-
-  function quitarServicio(id){
-    setFServicios(prev=>prev.filter(x=>x.id!==id));
+  function agregarSrvManual(){
+    const v=manualSrv.trim(); if(!v) return;
+    if(!fServicios.includes(v)) setFServicios(prev=>[...prev,v]);
+    setManualSrv("");
   }
 
   async function guardar(){
@@ -251,21 +224,13 @@ function App() {
       remito:fRemito, factura:fFactura, cotizacion:fCotizacion,
       lista_n_precio:fPrecio, lista_n_cobrado:fCobrado,
       lista_n_fecha_cobro:fFechaCobro||null, recordatorio_texto:fRecordatorio,
+      servicios_lista:joinSrvs(fServicios),
       fecha:fecha
     };
-    let sid=editId;
     if(editId){
       await PATCH("servicios",editId,payload);
-      await DELW("servicio_items","servicio_id",editId);
     } else {
-      const res=await POST("servicios",payload);
-      sid=Array.isArray(res)?res[0]?.id:res?.id;
-    }
-    // Guardar items de servicios
-    if(sid && fServicios.length>0){
-      for(const it of fServicios){
-        await POST("servicio_items",{servicio_id:sid,nombre:it.nombre});
-      }
+      await POST("servicios",payload);
     }
     await recargar();
     if(vista==="buscar") await recargarTodos();
@@ -281,25 +246,22 @@ function App() {
     setBorrar(null);
   }
 
-  async function guardarNuevoCliente(){
+  async function guardarNuevoCli(){
     const v=nuevoCliente.trim(); if(!v) return;
     await POST("clientes",{nombre:v});
     await recargarListas();
-    setFCliente(v); setNuevoCliente(""); setModoNuevoCliente(false);
+    setFCliente(v); setNuevoCliente(""); setModoNuevoCli(false);
   }
 
-  async function guardarNuevoProveedor(){
-    const v=nuevoProveedor.trim(); if(!v) return;
+  async function guardarNuevoProv(){
+    const v=nuevoProv.trim(); if(!v) return;
     await POST("proveedores",{nombre:v});
     await recargarListas();
-    setFProveedor(v); setNuevoProveedor(""); setModoNuevoProveedor(false);
+    setFProveedor(v); setNuevoProv(""); setModoNuevoProv(false);
   }
 
-  async function addAbm(){
-    const v=nuevoAbm.trim(); if(!v) return;
-    await POST(abmTab,{nombre:v}); await recargarListas(); setNuevoAbm("");
-  }
-  async function delAbm(id){await DEL(abmTab,id); await recargarListas();}
+  async function addAbm(){const v=nuevoAbm.trim();if(!v)return;await POST(abmTab,{nombre:v});await recargarListas();setNuevoAbm("");}
+  async function delAbm(id){await DEL(abmTab,id);await recargarListas();}
 
   const porFecha={};
   items.forEach(s=>{if(!porFecha[s.fecha])porFecha[s.fecha]=[];porFecha[s.fecha].push(s);});
@@ -311,9 +273,9 @@ function App() {
   }
 
   const filtrados=todos.filter(s=>{
-    if(bEstado!=="todos"&&s.estado!==bEstado) return false;
-    if(bDesde&&s.fecha<bDesde) return false;
-    if(bHasta&&s.fecha>bHasta) return false;
+    if(bEstado!=="todos"&&s.estado!==bEstado)return false;
+    if(bDesde&&s.fecha<bDesde)return false;
+    if(bHasta&&s.fecha>bHasta)return false;
     if(bTexto){const t=bTexto.toLowerCase();return[s.cliente,s.proveedor,s.remito,s.factura,s.cotizacion,s.direccion,s.recordatorio_texto].some(v=>v&&v.toLowerCase().includes(t));}
     return true;
   });
@@ -324,7 +286,6 @@ function App() {
   return (
     <div style={{maxWidth:480,margin:"0 auto",background:"#f5f5f7",minHeight:"100vh",paddingBottom:80}}>
 
-      {/* HEADER */}
       <div style={{background:"linear-gradient(135deg,#e74c3c,#c0392b)",color:"#fff",padding:"16px 14px 12px",borderRadius:"0 0 20px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(231,76,60,0.3)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div>
@@ -346,7 +307,6 @@ function App() {
         )}
       </div>
 
-      {/* AGENDA */}
       {vista==="agenda"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,background:"#fff",borderRadius:14,padding:"10px 14px",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
@@ -398,7 +358,6 @@ function App() {
         </div>
       )}
 
-      {/* BUSCAR */}
       {vista==="buscar"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
@@ -419,7 +378,6 @@ function App() {
         </div>
       )}
 
-      {/* ABM */}
       {vista==="abm"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
@@ -443,7 +401,6 @@ function App() {
         </div>
       )}
 
-      {/* MODAL */}
       {modal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:100}}>
           <div style={{background:"#f5f5f7",borderRadius:"20px 20px 0 0",padding:"20px 16px",width:"100%",maxHeight:"93vh",overflowY:"auto"}}>
@@ -469,37 +426,35 @@ function App() {
                 <label style={LBL}>Hora de llegada</label>
                 <input type="time" value={fHora} onChange={e=>setFHora(e.target.value)} style={INP}/>
 
-                {/* SERVICIOS */}
                 <label style={LBL}>Servicios asignados</label>
                 {fServicios.length>0&&(
-                  <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:10,padding:"10px",marginBottom:10}}>
-                    {fServicios.map(it=>(
-                      <div key={it.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f0f0f0"}}>
-                        <span style={{fontSize:14,color:"#222",fontWeight:500}}>🔧 {it.nombre}</span>
-                        <button onClick={()=>quitarServicio(it.id)} style={{background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:18,fontWeight:700}}>×</button>
+                  <div style={{background:"#fff",border:"1px solid #e0e0e0",borderRadius:10,padding:"8px 12px",marginBottom:8}}>
+                    {fServicios.map((srv,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<fServicios.length-1?"1px solid #f5f5f5":"none"}}>
+                        <span style={{fontSize:14,color:"#222"}}>🔧 {srv}</span>
+                        <button onClick={()=>setFServicios(fServicios.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:18,fontWeight:700,padding:"0 4px"}}>×</button>
                       </div>
                     ))}
                   </div>
                 )}
                 <div style={{display:"flex",gap:6,marginBottom:6}}>
-                  <select value={selServicio} onChange={e=>setSelServicio(e.target.value)} style={{...INP,marginBottom:0,flex:1}}>
+                  <select value={selSrv} onChange={e=>setSelSrv(e.target.value)} style={{...INP,marginBottom:0,flex:1}}>
                     <option value="">Seleccionar de la lista...</option>
                     {listas.equipos.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                   </select>
-                  <button onClick={agregarServicioDesdeSelect} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 16px",fontWeight:700,cursor:"pointer",fontSize:20,flexShrink:0}}>+</button>
+                  <button onClick={agregarSrvSelect} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 16px",fontWeight:700,cursor:"pointer",fontSize:22,flexShrink:0}}>+</button>
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:14}}>
-                  <input value={manualServicio} onChange={e=>setManualServicio(e.target.value)} onKeyDown={e=>e.key==="Enter"&&agregarServicioManual()} placeholder="O escribir servicio a mano..." style={{...INP,marginBottom:0,flex:1}}/>
-                  <button onClick={agregarServicioManual} style={{background:"#777",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",flexShrink:0}}>+</button>
+                  <input value={manualSrv} onChange={e=>setManualSrv(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarSrvManual();}} placeholder="O escribir a mano..." style={{...INP,marginBottom:0,flex:1}}/>
+                  <button onClick={agregarSrvManual} style={{background:"#777",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",flexShrink:0}}>+</button>
                 </div>
 
-                {/* CLIENTE */}
                 <label style={LBL}>Cliente</label>
-                {modoNuevoCliente?(
+                {modoNuevoCli?(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
-                    <input autoFocus value={nuevoCliente} onChange={e=>setNuevoCliente(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoCliente()} placeholder="Nuevo cliente..." style={{...INP,marginBottom:0,flex:1}}/>
-                    <button onClick={guardarNuevoCliente} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
-                    <button onClick={()=>setModoNuevoCliente(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
+                    <input autoFocus value={nuevoCliente} onChange={e=>setNuevoCliente(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoCli()} placeholder="Nuevo cliente..." style={{...INP,marginBottom:0,flex:1}}/>
+                    <button onClick={guardarNuevoCli} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
+                    <button onClick={()=>setModoNuevoCli(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
                   </div>
                 ):(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
@@ -507,20 +462,19 @@ function App() {
                       <option value="">Seleccionar cliente...</option>
                       {listas.clientes.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                     </select>
-                    <button onClick={()=>setModoNuevoCliente(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:20,flexShrink:0}}>+</button>
+                    <button onClick={()=>setModoNuevoCli(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:22,flexShrink:0}}>+</button>
                   </div>
                 )}
 
                 <label style={LBL}>Dirección</label>
                 <input placeholder="Dirección de trabajo" value={fDireccion} onChange={e=>setFDireccion(e.target.value)} style={INP}/>
 
-                {/* PROVEEDOR */}
                 <label style={LBL}>Proveedor</label>
-                {modoNuevoProveedor?(
+                {modoNuevoProv?(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
-                    <input autoFocus value={nuevoProveedor} onChange={e=>setNuevoProveedor(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoProveedor()} placeholder="Nuevo proveedor..." style={{...INP,marginBottom:0,flex:1}}/>
-                    <button onClick={guardarNuevoProveedor} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
-                    <button onClick={()=>setModoNuevoProveedor(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
+                    <input autoFocus value={nuevoProv} onChange={e=>setNuevoProv(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoProv()} placeholder="Nuevo proveedor..." style={{...INP,marginBottom:0,flex:1}}/>
+                    <button onClick={guardarNuevoProv} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
+                    <button onClick={()=>setModoNuevoProv(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
                   </div>
                 ):(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
@@ -528,7 +482,7 @@ function App() {
                       <option value="">Seleccionar proveedor...</option>
                       {listas.proveedores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                     </select>
-                    <button onClick={()=>setModoNuevoProveedor(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:20,flexShrink:0}}>+</button>
+                    <button onClick={()=>setModoNuevoProv(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:22,flexShrink:0}}>+</button>
                   </div>
                 )}
 
@@ -575,7 +529,6 @@ function App() {
         </div>
       )}
 
-      {/* CONFIRMAR BORRAR */}
       {borrar&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:24}}>
           <div style={{background:"#fff",borderRadius:18,padding:24,width:"100%",maxWidth:320}}>

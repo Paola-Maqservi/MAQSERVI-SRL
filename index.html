@@ -86,8 +86,13 @@ function SelectConAgregar(props) {
   var [guardando, setGuardando] = React.useState(false);
   async function handleAgregar() {
     var v=nuevo.trim(); if(!v) return;
-    setGuardando(true); await onAgregar(v); onChange(v);
+    setGuardando(true); await onAgregar(v);
     setNuevo(""); setModo("select"); setGuardando(false);
+    onChange(v);
+  }
+  function handleSelect(e) {
+    var val = e.target.value;
+    onChange(val);
   }
   if (modo==="nuevo") return (
     <div style={{display:"flex",gap:6,marginBottom:9}}>
@@ -98,7 +103,7 @@ function SelectConAgregar(props) {
   );
   return (
     <div style={{display:"flex",gap:6,marginBottom:9}}>
-      <select value={value} onChange={function(e){onChange(e.target.value);}} style={Object.assign({},inp,{marginBottom:0,flex:1})}>
+      <select value={value||""} onChange={handleSelect} style={Object.assign({},inp,{marginBottom:0,flex:1})}>
         <option value="">{placeholder}</option>
         {opciones.map(function(x){return <option key={x.id||x} value={x.nombre||x}>{x.nombre||x}</option>;})}
       </select>

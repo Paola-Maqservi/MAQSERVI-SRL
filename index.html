@@ -89,6 +89,7 @@ function App() {
   const [fRecordatorio, setFRecordatorio] = React.useState("");
   const [fServicios, setFServicios] = React.useState([]);
   const [nuevoServicio, setNuevoServicio] = React.useState("");
+  const [nuevoServicioManual, setNuevoServicioManual] = React.useState("");
   const [nuevoCliente, setNuevoCliente] = React.useState("");
   const [nuevoProveedor, setNuevoProveedor] = React.useState("");
   const [modoNuevoCliente, setModoNuevoCliente] = React.useState(false);
@@ -460,11 +461,11 @@ function App() {
                     <option value="">Seleccionar servicio...</option>
                     {listas.equipos.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                   </select>
-                  <button onClick={()=>{if(nuevoServicio){setFServicios([...fServicios,{id:Date.now()+"",nombre:nuevoServicio}]);setNuevoServicio("");}}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                  <button onClick={()=>{if(nuevoServicio){setFServicios(prev=>[...prev,{id:Date.now()+"",nombre:nuevoServicio}]);setNuevoServicio("");}}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:10}}>
-                  <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>e.key==="Enter"&&agregarServicio()} placeholder="O escribir a mano..." style={{...S.inp,marginBottom:0,flex:1}}/>
-                  <button onClick={agregarServicio} style={{background:"#555",color:"#fff",border:"none",borderRadius:10,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>+</button>
+                  <input value={nuevoServicioManual} onChange={e=>setNuevoServicioManual(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&nuevoServicioManual.trim()){setFServicios(prev=>[...prev,{id:Date.now()+"",nombre:nuevoServicioManual.trim()}]);setNuevoServicioManual("");}}} placeholder="O escribir a mano..." style={{...S.inp,marginBottom:0,flex:1}}/>
+                  <button onClick={()=>{if(nuevoServicioManual.trim()){setFServicios(prev=>[...prev,{id:Date.now()+"",nombre:nuevoServicioManual.trim()}]);setNuevoServicioManual("");}}} style={{background:"#555",color:"#fff",border:"none",borderRadius:10,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>+</button>
                 </div>
 
                 <label style={S.lbl}>Cliente</label>

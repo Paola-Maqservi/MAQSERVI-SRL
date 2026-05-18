@@ -7,6 +7,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; min-height: 100vh; }
+    select, input, textarea { font-family: inherit; }
   </style>
 </head>
 <body>
@@ -16,339 +17,293 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
 
-const SUPABASE_URL = "https://rlacqaxsedwunmlqqzoo.supabase.co";
-const SUPABASE_KEY = "sb_publishable_BJcqG7mEY4yKvLkzRRAsTA_zasGKqKL";
-const H = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY };
+const SB = "https://rlacqaxsedwunmlqqzoo.supabase.co";
+const KEY = "sb_publishable_BJcqG7mEY4yKvLkzRRAsTA_zasGKqKL";
+const HD = {"Content-Type":"application/json","apikey":KEY,"Authorization":"Bearer "+KEY};
 
-async function sbGet(table) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + table + "?order=nombre", { headers: H });
-  return r.json();
-}
-async function sbGetServicios(desde, hasta) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/servicios?fecha=gte." + desde + "&fecha=lte." + hasta + "&order=fecha,hora", { headers: H });
-  return r.json();
-}
-async function sbGetTodos() {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/servicios?order=fecha,hora", { headers: H });
-  return r.json();
-}
-async function sbGetItems(servicioId) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/servicio_items?servicio_id=eq." + servicioId + "&order=created_at", { headers: H });
-  return r.json();
-}
-async function sbInsert(table, body) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + table, {
-    method: "POST", headers: Object.assign({}, H, {"Prefer": "return=representation"}), body: JSON.stringify(body)
-  });
-  return r.json();
-}
-async function sbUpdate(table, id, body) {
-  await fetch(SUPABASE_URL + "/rest/v1/" + table + "?id=eq." + id, {
-    method: "PATCH", headers: Object.assign({}, H, {"Prefer": "return=representation"}), body: JSON.stringify(body)
-  });
-}
-async function sbDelete(table, id) {
-  await fetch(SUPABASE_URL + "/rest/v1/" + table + "?id=eq." + id, { method: "DELETE", headers: H });
-}
-async function sbDeleteWhere(table, field, val) {
-  await fetch(SUPABASE_URL + "/rest/v1/" + table + "?" + field + "=eq." + val, { method: "DELETE", headers: H });
-}
+async function GET(t,q) { const r=await fetch(SB+"/rest/v1/"+t+(q||""),{headers:HD}); return r.json(); }
+async function POST(t,b) { const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)}); return r.json(); }
+async function PATCH(t,id,b) { await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"PATCH",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)}); }
+async function DEL(t,id) { await fetch(SB+"/rest/v1/"+t+"?id=eq."+id,{method:"DELETE",headers:HD}); }
+async function DELWHERE(t,f,v) { await fetch(SB+"/rest/v1/"+t+"?"+f+"=eq."+v,{method:"DELETE",headers:HD}); }
 
 const ESTADOS = [
-  { id: "confirmado", label: "Confirmado", color: "#e74c3c", text: "#fff" },
-  { id: "facturado", label: "Facturado", color: "#f1c40f", text: "#7a6000" },
-  { id: "suspendido", label: "Suspendido", color: "#95a5a6", text: "#fff" },
-  { id: "recordatorio", label: "Recordatorio", color: "#3498db", text: "#fff" },
-  { id: "reservado", label: "Reservado", color: "#2ecc71", text: "#222" },
+  {id:"confirmado",label:"Confirmado",color:"#e74c3c",text:"#fff"},
+  {id:"facturado",label:"Facturado",color:"#f1c40f",text:"#7a6000"},
+  {id:"suspendido",label:"Suspendido",color:"#95a5a6",text:"#fff"},
+  {id:"recordatorio",label:"Recordatorio",color:"#3498db",text:"#fff"},
+  {id:"reservado",label:"Reservado",color:"#2ecc71",text:"#222"},
 ];
 
-function pad(n) { return String(n).padStart(2,"0"); }
-function fmtDate(d) { return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
-function parseDate(s) { var p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
-function fmtDisplay(s) { return parseDate(s).toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); }
-function fmtShort(s) { return parseDate(s).toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"}); }
-function addDays(s,n) { var d=parseDate(s); d.setDate(d.getDate()+n); return fmtDate(d); }
-function startOfWeek(s) { var d=parseDate(s); d.setDate(d.getDate()-d.getDay()); return fmtDate(d); }
-function startOfMonth(s) { var d=parseDate(s); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-01"; }
-function endOfMonth(s) { var d=parseDate(s); return fmtDate(new Date(d.getFullYear(),d.getMonth()+1,0)); }
-function estadoObj(id) { return ESTADOS.find(function(e){return e.id===id;})||ESTADOS[0]; }
-function emptyForm() { return {estado:"confirmado",hora:"",cliente:"",direccion:"",proveedor:"",nro_equipo:"",operador:"",remito:"",factura:"",cotizacion:"",lista_n_precio:"",lista_n_cobrado:false,lista_n_fecha_cobro:"",recordatorio_texto:"",servicios_items:[]}; }
+function pad(n){return String(n).padStart(2,"0");}
+function hoy(){const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function pD(s){const[y,m,d]=s.split("-");return new Date(+y,+m-1,+d);}
+function fmtL(s){return pD(s).toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});}
+function fmtC(s){return pD(s).toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});}
+function sumD(s,n){const d=pD(s);d.setDate(d.getDate()+n);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function lunSem(s){const d=pD(s);d.setDate(d.getDate()-d.getDay());return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function iniMes(s){const d=pD(s);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-01";}
+function finMes(s){const d=pD(s);return new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().split("T")[0];}
+function getEst(id){return ESTADOS.find(e=>e.id===id)||ESTADOS[0];}
 
-var inp = {width:"100%",padding:"9px 11px",fontSize:14,border:"1px solid #ddd",borderRadius:9,boxSizing:"border-box",marginBottom:9,background:"#fff",color:"#222"};
-var lbl = {fontSize:11,color:"#888",marginBottom:3,display:"block",fontWeight:600,textTransform:"uppercase",letterSpacing:0.4};
-var btnP = {background:"#e74c3c",color:"#fff",border:"none",borderRadius:11,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%"};
-var btnG = {background:"transparent",color:"#555",border:"1px solid #ddd",borderRadius:11,padding:"13px 20px",fontSize:14,cursor:"pointer",width:"100%"};
-
-function SelectConAgregar(props) {
-  var value=props.value, onChange=props.onChange, opciones=props.opciones, placeholder=props.placeholder, onAgregar=props.onAgregar, tipo=props.tipo;
-  var [modo, setModo] = React.useState("select");
-  var [nuevo, setNuevo] = React.useState("");
-  var [guardando, setGuardando] = React.useState(false);
-  async function handleAgregar() {
-    var v=nuevo.trim(); if(!v) return;
-    setGuardando(true); await onAgregar(v);
-    setNuevo(""); setModo("select"); setGuardando(false);
-    onChange(v);
-  }
-  function handleSelect(e) {
-    var val = e.target.value;
-    onChange(val);
-  }
-  if (modo==="nuevo") return (
-    <div style={{display:"flex",gap:6,marginBottom:9}}>
-      <input autoFocus value={nuevo} onChange={function(e){setNuevo(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")handleAgregar();}} placeholder={"Nuevo "+tipo+"..."} style={Object.assign({},inp,{marginBottom:0,flex:1})} />
-      <button onClick={handleAgregar} disabled={guardando} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>{guardando?"...":"✓"}</button>
-      <button onClick={function(){setModo("select");}} style={{background:"#eee",color:"#555",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
-    </div>
-  );
-  return (
-    <div style={{display:"flex",gap:6,marginBottom:9}}>
-      <select value={value||""} onChange={handleSelect} style={Object.assign({},inp,{marginBottom:0,flex:1})}>
-        <option value="">{placeholder}</option>
-        {opciones.map(function(x){return <option key={x.id||x} value={x.nombre||x}>{x.nombre||x}</option>;})}
-      </select>
-      <button onClick={function(){setModo("nuevo");}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
-    </div>
-  );
-}
-
-function ServiciosMultiples(props) {
-  var items=props.items, onChange=props.onChange, equipos=props.equipos;
-  var [nuevo, setNuevo] = React.useState("");
-  function agregar() {
-    var v=nuevo.trim(); if(!v) return;
-    onChange(items.concat([{id:Date.now()+"",nombre:v}]));
-    setNuevo("");
-  }
-  function quitar(id) { onChange(items.filter(function(i){return i.id!==id;})); }
-  return (
-    <div style={{marginBottom:9}}>
-      {items.map(function(item){return (
-        <div key={item.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-          <span style={{flex:1,background:"#fff",border:"1px solid #ddd",borderRadius:8,padding:"7px 11px",fontSize:14,color:"#222"}}>{item.nombre}</span>
-          <button onClick={function(){quitar(item.id);}} style={{background:"#fff0f0",border:"none",color:"#e74c3c",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontWeight:700}}>✕</button>
-        </div>
-      );})}
-      <div style={{display:"flex",gap:6,marginBottom:6}}>
-        <select value={nuevo} onChange={function(e){setNuevo(e.target.value);}} style={Object.assign({},inp,{marginBottom:0,flex:1})}>
-          <option value="">Seleccionar servicio...</option>
-          {equipos.map(function(x){return <option key={x.id} value={x.nombre}>{x.nombre}</option>;})}
-        </select>
-        <button onClick={agregar} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:9,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
-      </div>
-      <div style={{display:"flex",gap:6}}>
-        <input value={nuevo} onChange={function(e){setNuevo(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")agregar();}} placeholder="O escribir a mano..." style={Object.assign({},inp,{marginBottom:0,flex:1})} />
-        <button onClick={agregar} style={{background:"#555",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer",fontSize:13}}>+</button>
-      </div>
-    </div>
-  );
-}
-
-function ServicioCard(props) {
-  var s=props.s, onEditar=props.onEditar, onEliminar=props.onEliminar;
-  var est=estadoObj(s.estado);
-  if (s.estado==="recordatorio") return (
-    <div style={{background:"#ebf5fb",borderLeft:"4px solid #3498db",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{display:"flex",alignItems:"center",gap:7}}>
-          <span style={{background:"#3498db",color:"#fff",fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>📝 Recordatorio</span>
-          {s.fecha&&<span style={{fontSize:11,color:"#aaa"}}>{fmtShort(s.fecha)}</span>}
-        </div>
-        <div style={{display:"flex",gap:4}}>
-          <button onClick={function(){onEditar(s);}} style={{background:"#d6eaf8",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
-          <button onClick={function(){onEliminar(s.id);}} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
-        </div>
-      </div>
-      {s.recordatorio_texto&&<div style={{fontSize:14,color:"#222",marginTop:6,fontWeight:500}}>{s.recordatorio_texto}</div>}
-    </div>
-  );
-  return (
-    <div style={{background:"#fff",borderLeft:"4px solid "+est.color,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-          <span style={{background:est.color,color:est.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{est.label}</span>
-          {s.hora&&<span style={{fontSize:12,color:"#888"}}>🕐 {s.hora}</span>}
-          {s.fecha&&<span style={{fontSize:11,color:"#aaa"}}>{fmtShort(s.fecha)}</span>}
-        </div>
-        <div style={{display:"flex",gap:4}}>
-          <button onClick={function(){onEditar(s);}} style={{background:"#f0f0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
-          <button onClick={function(){onEliminar(s.id);}} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
-        </div>
-      </div>
-      {s._items&&s._items.length>0&&(
-        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:5}}>
-          {s._items.map(function(it){return <span key={it.id} style={{background:"#f0f0f0",color:"#333",fontSize:12,padding:"3px 9px",borderRadius:20,fontWeight:600}}>🔧 {it.nombre}</span>;})}
-        </div>
-      )}
-      <div style={{fontSize:15,fontWeight:700,color:"#222",marginBottom:3}}>{s.cliente||"—"}</div>
-      {s.direccion&&<div style={{fontSize:12,color:"#666",marginBottom:5}}>📍 {s.direccion}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12,marginBottom:5}}>
-        {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(function(x){return x[1];}).map(function(x){return (
-          <span key={x[0]} style={{color:"#888"}}>{x[0]}: <b style={{color:"#333"}}>{x[1]}</b></span>
-        );})}
-      </div>
-      {s.lista_n_precio&&(
-        <div style={{marginTop:5,background:s.lista_n_cobrado?"#eafaf1":"#fef9e7",border:"1px solid "+(s.lista_n_cobrado?"#2ecc71":"#f1c40f"),borderRadius:8,padding:"6px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#222"}}>💰 Lista N: ${s.lista_n_precio}</span>
-          <span style={{fontSize:11,fontWeight:700,color:s.lista_n_cobrado?"#27ae60":"#e67e22"}}>{s.lista_n_cobrado?"✅ Cobrado"+(s.lista_n_fecha_cobro?" "+s.lista_n_fecha_cobro:""):"⏳ Pendiente"}</span>
-        </div>
-      )}
-    </div>
-  );
-}
+const S = {
+  inp:{width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",borderRadius:10,boxSizing:"border-box",marginBottom:10,background:"#fff",color:"#222"},
+  lbl:{fontSize:11,color:"#888",marginBottom:4,display:"block",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5},
+  btnR:{background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%"},
+  btnG:{background:"#fff",color:"#555",border:"1px solid #ddd",borderRadius:12,padding:"14px",fontSize:15,cursor:"pointer",width:"100%"},
+};
 
 function App() {
-  var [mainView, setMainView] = React.useState("agenda");
-  var [vistaAgenda, setVistaAgenda] = React.useState("dia");
-  var [date, setDate] = React.useState(fmtDate(new Date()));
-  var [servicios, setServicios] = React.useState([]);
-  var [todosServicios, setTodosServicios] = React.useState([]);
-  var [listas, setListas] = React.useState({equipos:[],clientes:[],proveedores:[],operadores:[]});
-  var [loading, setLoading] = React.useState(true);
-  var [modal, setModal] = React.useState(null);
-  var [form, setForm] = React.useState(null);
-  var [editId, setEditId] = React.useState(null);
-  var [saving, setSaving] = React.useState(false);
-  var [confirmDel, setConfirmDel] = React.useState(null);
-  var [abmTab, setAbmTab] = React.useState("equipos");
-  var [newItem, setNewItem] = React.useState("");
-  var [abmLoading, setAbmLoading] = React.useState(false);
-  var [busqEstado, setBusqEstado] = React.useState("todos");
-  var [busqTexto, setBusqTexto] = React.useState("");
-  var [busqDesde, setBusqDesde] = React.useState("");
-  var [busqHasta, setBusqHasta] = React.useState("");
+  const [vista, setVista] = React.useState("agenda");
+  const [modo, setModo] = React.useState("dia");
+  const [fecha, setFecha] = React.useState(hoy());
+  const [items, setItems] = React.useState([]);
+  const [todos, setTodos] = React.useState([]);
+  const [listas, setListas] = React.useState({equipos:[],clientes:[],proveedores:[],operadores:[]});
+  const [cargando, setCargando] = React.useState(true);
+  const [modal, setModal] = React.useState(false);
+  const [editando, setEditando] = React.useState(null);
+  const [guardando, setGuardando] = React.useState(false);
+  const [borrar, setBorrar] = React.useState(null);
+  const [abmTab, setAbmTab] = React.useState("equipos");
+  const [nuevoItem, setNuevoItem] = React.useState("");
+  const [bTexto, setBTexto] = React.useState("");
+  const [bEstado, setBEstado] = React.useState("todos");
+  const [bDesde, setBDesde] = React.useState("");
+  const [bHasta, setBHasta] = React.useState("");
+
+  // Form state individual
+  const [fEstado, setFEstado] = React.useState("confirmado");
+  const [fHora, setFHora] = React.useState("");
+  const [fCliente, setFCliente] = React.useState("");
+  const [fDireccion, setFDireccion] = React.useState("");
+  const [fProveedor, setFProveedor] = React.useState("");
+  const [fNroEq, setFNroEq] = React.useState("");
+  const [fOperador, setFOperador] = React.useState("");
+  const [fRemito, setFRemito] = React.useState("");
+  const [fFactura, setFFactura] = React.useState("");
+  const [fCotizacion, setFCotizacion] = React.useState("");
+  const [fPrecio, setFPrecio] = React.useState("");
+  const [fCobrado, setFCobrado] = React.useState(false);
+  const [fFechaCobro, setFFechaCobro] = React.useState("");
+  const [fRecordatorio, setFRecordatorio] = React.useState("");
+  const [fServicios, setFServicios] = React.useState([]);
+  const [nuevoServicio, setNuevoServicio] = React.useState("");
+  const [nuevoCliente, setNuevoCliente] = React.useState("");
+  const [nuevoProveedor, setNuevoProveedor] = React.useState("");
+  const [modoNuevoCliente, setModoNuevoCliente] = React.useState(false);
+  const [modoNuevoProveedor, setModoNuevoProveedor] = React.useState(false);
 
   function getRango() {
-    if (vistaAgenda==="dia") return [date,date];
-    if (vistaAgenda==="semana") { var s=startOfWeek(date); return [s,addDays(s,6)]; }
-    return [startOfMonth(date),endOfMonth(date)];
+    if (modo==="dia") return [fecha,fecha];
+    if (modo==="semana") { const s=lunSem(fecha); return [s,sumD(s,6)]; }
+    return [iniMes(fecha),finMes(fecha)];
   }
 
-  async function enrichServicios(list) {
-    return Promise.all(list.map(async function(s) {
-      var items = await sbGetItems(s.id);
-      return Object.assign({},s,{_items:Array.isArray(items)?items:[]});
+  async function cargarItems() {
+    setCargando(true);
+    const [d1,d2]=getRango();
+    const data=await GET("servicios","?fecha=gte."+d1+"&fecha=lte."+d2+"&order=fecha,hora");
+    const lista=Array.isArray(data)?data:[];
+    const enriq=await Promise.all(lista.map(async s=>{
+      const sub=await GET("servicio_items","?servicio_id=eq."+s.id+"&order=created_at");
+      return {...s,_items:Array.isArray(sub)?sub:[]};
     }));
+    setItems(enriq);
+    setCargando(false);
   }
 
-  async function loadServicios() {
-    setLoading(true);
-    var rango=getRango();
-    var d=await sbGetServicios(rango[0],rango[1]);
-    var list=Array.isArray(d)?d:[];
-    var enriched=await enrichServicios(list);
-    setServicios(enriched);
-    setLoading(false);
+  async function cargarTodos() {
+    const data=await GET("servicios","?order=fecha,hora");
+    const lista=Array.isArray(data)?data:[];
+    const enriq=await Promise.all(lista.map(async s=>{
+      const sub=await GET("servicio_items","?servicio_id=eq."+s.id+"&order=created_at");
+      return {...s,_items:Array.isArray(sub)?sub:[]};
+    }));
+    setTodos(enriq);
   }
 
-  async function loadListas() {
-    var results=await Promise.all([sbGet("equipos"),sbGet("clientes"),sbGet("proveedores"),sbGet("operadores")]);
-    setListas({equipos:Array.isArray(results[0])?results[0]:[],clientes:Array.isArray(results[1])?results[1]:[],proveedores:Array.isArray(results[2])?results[2]:[],operadores:Array.isArray(results[3])?results[3]:[]});
+  async function cargarListas() {
+    const [eq,cl,pr,op]=await Promise.all([GET("equipos","?order=nombre"),GET("clientes","?order=nombre"),GET("proveedores","?order=nombre"),GET("operadores","?order=nombre")]);
+    setListas({equipos:Array.isArray(eq)?eq:[],clientes:Array.isArray(cl)?cl:[],proveedores:Array.isArray(pr)?pr:[],operadores:Array.isArray(op)?op:[]});
   }
 
-  async function loadTodos() {
-    var d=await sbGetTodos();
-    var list=Array.isArray(d)?d:[];
-    var enriched=await enrichServicios(list);
-    setTodosServicios(enriched);
+  React.useEffect(()=>{cargarListas();},[]);
+  React.useEffect(()=>{cargarItems();},[fecha,modo]);
+  React.useEffect(()=>{if(vista==="buscar")cargarTodos();},[vista]);
+
+  function abrirNuevo() {
+    setEditando(null);
+    setFEstado("confirmado"); setFHora(""); setFCliente(""); setFDireccion(""); setFProveedor("");
+    setFNroEq(""); setFOperador(""); setFRemito(""); setFFactura(""); setFCotizacion("");
+    setFPrecio(""); setFCobrado(false); setFFechaCobro(""); setFRecordatorio(""); setFServicios([]);
+    setNuevoServicio(""); setModoNuevoCliente(false); setModoNuevoProveedor(false);
+    setModal(true);
   }
 
-  React.useEffect(function(){loadListas();},[]);
-  React.useEffect(function(){loadServicios();},[date,vistaAgenda]);
-  React.useEffect(function(){if(mainView==="buscar")loadTodos();},[mainView]);
-
-  function prevPeriodo() {
-    if (vistaAgenda==="dia") setDate(addDays(date,-1));
-    else if (vistaAgenda==="semana") setDate(addDays(startOfWeek(date),-7));
-    else { var d=parseDate(date); d.setMonth(d.getMonth()-1); setDate(fmtDate(d)); }
-  }
-  function nextPeriodo() {
-    if (vistaAgenda==="dia") setDate(addDays(date,1));
-    else if (vistaAgenda==="semana") setDate(addDays(startOfWeek(date),7));
-    else { var d=parseDate(date); d.setMonth(d.getMonth()+1); setDate(fmtDate(d)); }
-  }
-  function tituloNavegacion() {
-    if (vistaAgenda==="dia") return fmtDisplay(date);
-    if (vistaAgenda==="semana") { var s=startOfWeek(date),e=addDays(s,6); return parseDate(s).toLocaleDateString("es-AR",{day:"numeric",month:"short"})+" - "+parseDate(e).toLocaleDateString("es-AR",{day:"numeric",month:"short",year:"numeric"}); }
-    return parseDate(date).toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+  function abrirEditar(s) {
+    setEditando(s.id);
+    setFEstado(s.estado||"confirmado"); setFHora(s.hora||""); setFCliente(s.cliente||"");
+    setFDireccion(s.direccion||""); setFProveedor(s.proveedor||""); setFNroEq(s.nro_equipo||"");
+    setFOperador(s.operador||""); setFRemito(s.remito||""); setFFactura(s.factura||"");
+    setFCotizacion(s.cotizacion||""); setFPrecio(s.lista_n_precio||""); setFCobrado(s.lista_n_cobrado||false);
+    setFFechaCobro(s.lista_n_fecha_cobro||""); setFRecordatorio(s.recordatorio_texto||"");
+    setFServicios(s._items||[]); setNuevoServicio(""); setModoNuevoCliente(false); setModoNuevoProveedor(false);
+    setModal(true);
   }
 
-  function openNuevo() { setForm(emptyForm()); setEditId(null); setModal("servicio"); }
-  function openEditar(s) {
-    setForm({estado:s.estado,hora:s.hora||"",cliente:s.cliente||"",direccion:s.direccion||"",proveedor:s.proveedor||"",nro_equipo:s.nro_equipo||"",operador:s.operador||"",remito:s.remito||"",factura:s.factura||"",cotizacion:s.cotizacion||"",lista_n_precio:s.lista_n_precio||"",lista_n_cobrado:s.lista_n_cobrado||false,lista_n_fecha_cobro:s.lista_n_fecha_cobro||"",recordatorio_texto:s.recordatorio_texto||"",servicios_items:s._items||[]});
-    setEditId(s.id); setModal("servicio");
-  }
+  function cerrarModal() { setModal(false); setEditando(null); }
 
-  async function saveServicio() {
-    if (!form) return;
-    setSaving(true);
-    var items=form.servicios_items;
-    var payload={
-      estado:form.estado, hora:form.hora, cliente:form.cliente,
-      direccion:form.direccion, proveedor:form.proveedor,
-      nro_equipo:form.nro_equipo, operador:form.operador,
-      remito:form.remito, factura:form.factura, cotizacion:form.cotizacion,
-      lista_n_precio:form.lista_n_precio, lista_n_cobrado:form.lista_n_cobrado,
-      lista_n_fecha_cobro:form.lista_n_fecha_cobro,
-      recordatorio_texto:form.recordatorio_texto, fecha:date
+  async function guardar() {
+    setGuardando(true);
+    const payload = {
+      estado: fEstado,
+      hora: fHora,
+      cliente: fCliente,
+      direccion: fDireccion,
+      proveedor: fProveedor,
+      nro_equipo: fNroEq,
+      operador: fOperador,
+      remito: fRemito,
+      factura: fFactura,
+      cotizacion: fCotizacion,
+      lista_n_precio: fPrecio,
+      lista_n_cobrado: fCobrado,
+      lista_n_fecha_cobro: fFechaCobro||null,
+      recordatorio_texto: fRecordatorio,
+      fecha: fecha
     };
-    var servicioId=editId;
-    if (editId) {
-      await sbUpdate("servicios",editId,payload);
-      await sbDeleteWhere("servicio_items","servicio_id",editId);
+    let sid = editando;
+    if (editando) {
+      await PATCH("servicios",editando,payload);
+      await DELWHERE("servicio_items","servicio_id",editando);
     } else {
-      var res=await sbInsert("servicios",payload);
-      servicioId=Array.isArray(res)?res[0]&&res[0].id:res&&res.id;
+      const res=await POST("servicios",payload);
+      sid=Array.isArray(res)?res[0]?.id:res?.id;
     }
-    if (servicioId&&items.length>0) {
-      for (var i=0;i<items.length;i++) {
-        await sbInsert("servicio_items",{servicio_id:servicioId,nombre:items[i].nombre});
-      }
+    for (const it of fServicios) {
+      await POST("servicio_items",{servicio_id:sid,nombre:it.nombre});
     }
-    await loadServicios();
-    setSaving(false); setModal(null); setForm(null); setEditId(null);
+    await cargarItems();
+    setGuardando(false);
+    cerrarModal();
   }
 
-  async function deleteServicio(id) {
-    await sbDelete("servicios",id);
-    await loadServicios();
-    if (mainView==="buscar") await loadTodos();
-    setConfirmDel(null);
+  async function eliminar(id) {
+    await DEL("servicios",id);
+    await cargarItems();
+    if (vista==="buscar") await cargarTodos();
+    setBorrar(null);
   }
 
-  async function agregarCliente(n) { await sbInsert("clientes",{nombre:n}); await loadListas(); }
-  async function agregarProveedor(n) { await sbInsert("proveedores",{nombre:n}); await loadListas(); }
+  function agregarServicio() {
+    const v=nuevoServicio.trim(); if(!v) return;
+    setFServicios([...fServicios,{id:Date.now()+"",nombre:v}]);
+    setNuevoServicio("");
+  }
+
+  async function guardarNuevoCliente() {
+    const v=nuevoCliente.trim(); if(!v) return;
+    await POST("clientes",{nombre:v});
+    await cargarListas();
+    setFCliente(v);
+    setNuevoCliente("");
+    setModoNuevoCliente(false);
+  }
+
+  async function guardarNuevoProveedor() {
+    const v=nuevoProveedor.trim(); if(!v) return;
+    await POST("proveedores",{nombre:v});
+    await cargarListas();
+    setFProveedor(v);
+    setNuevoProveedor("");
+    setModoNuevoProveedor(false);
+  }
 
   async function addAbm() {
-    var v=newItem.trim(); if(!v) return;
-    setAbmLoading(true); await sbInsert(abmTab,{nombre:v}); await loadListas(); setNewItem(""); setAbmLoading(false);
-  }
-  async function removeAbm(id) {
-    setAbmLoading(true); await sbDelete(abmTab,id); await loadListas(); setAbmLoading(false);
+    const v=nuevoItem.trim(); if(!v) return;
+    await POST(abmTab,{nombre:v});
+    await cargarListas(); setNuevoItem("");
   }
 
-  var serviciosFiltrados=todosServicios.filter(function(s){
-    if (busqEstado!=="todos"&&s.estado!==busqEstado) return false;
-    if (busqDesde&&s.fecha<busqDesde) return false;
-    if (busqHasta&&s.fecha>busqHasta) return false;
-    if (busqTexto) { var t=busqTexto.toLowerCase(); return [s.cliente,s.proveedor,s.operador,s.remito,s.factura,s.cotizacion,s.direccion,s.recordatorio_texto].some(function(v){return v&&v.toLowerCase().indexOf(t)>=0;}); }
+  async function delAbm(id) { await DEL(abmTab,id); await cargarListas(); }
+
+  const porFecha={};
+  items.forEach(s=>{if(!porFecha[s.fecha])porFecha[s.fecha]=[];porFecha[s.fecha].push(s);});
+
+  function getDias() {
+    if (modo==="semana"){const s=lunSem(fecha);return Array.from({length:7},(_,i)=>sumD(s,i));}
+    if (modo==="mes"){const s=iniMes(fecha),e=finMes(fecha);const d=[];let c=s;while(c<=e){d.push(c);c=sumD(c,1);}return d;}
+    return [fecha];
+  }
+
+  const filtrados=todos.filter(s=>{
+    if (bEstado!=="todos"&&s.estado!==bEstado) return false;
+    if (bDesde&&s.fecha<bDesde) return false;
+    if (bHasta&&s.fecha>bHasta) return false;
+    if (bTexto){const t=bTexto.toLowerCase();return [s.cliente,s.proveedor,s.remito,s.factura,s.cotizacion,s.direccion,s.recordatorio_texto].some(v=>v&&v.toLowerCase().includes(t));}
     return true;
   });
 
-  var serviciosPorFecha={};
-  servicios.forEach(function(s){ if(!serviciosPorFecha[s.fecha]) serviciosPorFecha[s.fecha]=[]; serviciosPorFecha[s.fecha].push(s); });
+  const esHoy=fecha===hoy();
+  const esRec=fEstado==="recordatorio";
 
-  var isToday=date===fmtDate(new Date());
-  var esRecordatorio=form&&form.estado==="recordatorio";
-
-  function getDias() {
-    if (vistaAgenda==="semana") { var s=startOfWeek(date); return Array.from({length:7},function(_,i){return addDays(s,i);}); }
-    if (vistaAgenda==="mes") { var s2=startOfMonth(date),e=endOfMonth(date),dias=[],c=s2; while(c<=e){dias.push(c);c=addDays(c,1);} return dias; }
-    return [date];
+  function Tarjeta({s}) {
+    const est=getEst(s.estado);
+    if (s.estado==="recordatorio") return (
+      <div style={{background:"#ebf5fb",borderLeft:"4px solid #3498db",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{display:"flex",gap:7,alignItems:"center"}}>
+            <span style={{background:"#3498db",color:"#fff",fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>📝 Recordatorio</span>
+            <span style={{fontSize:11,color:"#aaa"}}>{fmtC(s.fecha)}</span>
+          </div>
+          <div style={{display:"flex",gap:4}}>
+            <button onClick={()=>abrirEditar(s)} style={{background:"#d6eaf8",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
+            <button onClick={()=>setBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
+          </div>
+        </div>
+        {s.recordatorio_texto&&<div style={{fontSize:14,color:"#222",marginTop:6,fontWeight:500}}>{s.recordatorio_texto}</div>}
+      </div>
+    );
+    return (
+      <div style={{background:"#fff",borderLeft:"4px solid "+est.color,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+          <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{background:est.color,color:est.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{est.label}</span>
+            {s.hora&&<span style={{fontSize:12,color:"#888"}}>🕐 {s.hora}</span>}
+            <span style={{fontSize:11,color:"#aaa"}}>{fmtC(s.fecha)}</span>
+          </div>
+          <div style={{display:"flex",gap:4}}>
+            <button onClick={()=>abrirEditar(s)} style={{background:"#f0f0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>✏️</button>
+            <button onClick={()=>setBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
+          </div>
+        </div>
+        {s._items&&s._items.length>0&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:5}}>
+            {s._items.map(it=><span key={it.id} style={{background:"#f0f0f0",color:"#333",fontSize:12,padding:"3px 9px",borderRadius:20,fontWeight:600}}>🔧 {it.nombre}</span>)}
+          </div>
+        )}
+        {s.cliente&&<div style={{fontSize:15,fontWeight:700,color:"#222",marginBottom:3}}>{s.cliente}</div>}
+        {s.direccion&&<div style={{fontSize:12,color:"#666",marginBottom:5}}>📍 {s.direccion}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12}}>
+          {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(x=>x[1]).map(x=>(
+            <span key={x[0]} style={{color:"#888"}}>{x[0]}: <b style={{color:"#333"}}>{x[1]}</b></span>
+          ))}
+        </div>
+        {s.lista_n_precio&&(
+          <div style={{marginTop:6,background:s.lista_n_cobrado?"#eafaf1":"#fef9e7",border:"1px solid "+(s.lista_n_cobrado?"#2ecc71":"#f1c40f"),borderRadius:8,padding:"6px 10px",display:"flex",justifyContent:"space-between"}}>
+            <span style={{fontSize:12,fontWeight:700}}>💰 Lista N: ${s.lista_n_precio}</span>
+            <span style={{fontSize:11,fontWeight:700,color:s.lista_n_cobrado?"#27ae60":"#e67e22"}}>{s.lista_n_cobrado?"✅ Cobrado":"⏳ Pendiente"}</span>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div style={{maxWidth:480,margin:"0 auto",background:"#f5f5f7",minHeight:"100vh",paddingBottom:80}}>
+
+      {/* HEADER */}
       <div style={{background:"linear-gradient(135deg,#e74c3c,#c0392b)",color:"#fff",padding:"16px 14px 12px",borderRadius:"0 0 20px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(231,76,60,0.3)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div>
@@ -356,186 +311,256 @@ function App() {
             <div style={{fontSize:11,opacity:0.8}}>Gestión de Alquileres</div>
           </div>
           <div style={{display:"flex",gap:5}}>
-            {[["agenda","📅"],["buscar","🔍"],["abm","⚙️"]].map(function(x){return (
-              <button key={x[0]} onClick={function(){setMainView(x[0]);}} style={{background:mainView===x[0]?"rgba(255,255,255,0.28)":"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 11px",fontSize:13,cursor:"pointer",fontWeight:mainView===x[0]?700:400}}>{x[1]}</button>
-            );})}
+            {[["agenda","📅"],["buscar","🔍"],["abm","⚙️"]].map(([v,ic])=>(
+              <button key={v} onClick={()=>setVista(v)} style={{background:vista===v?"rgba(255,255,255,0.28)":"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 11px",fontSize:13,cursor:"pointer",fontWeight:vista===v?700:400}}>{ic}</button>
+            ))}
           </div>
         </div>
-        {mainView==="agenda"&&(
+        {vista==="agenda"&&(
           <div style={{display:"flex",gap:6}}>
-            {["dia","semana","mes"].map(function(v){return (
-              <button key={v} onClick={function(){setVistaAgenda(v);}} style={{background:vistaAgenda===v?"rgba(255,255,255,0.28)":"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 12px",fontSize:12,cursor:"pointer",fontWeight:vistaAgenda===v?700:400,textTransform:"capitalize",flex:1}}>{v}</button>
-            );})}
+            {["dia","semana","mes"].map(v=>(
+              <button key={v} onClick={()=>setModo(v)} style={{background:modo===v?"rgba(255,255,255,0.28)":"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 12px",fontSize:12,cursor:"pointer",fontWeight:modo===v?700:400,textTransform:"capitalize",flex:1}}>{v}</button>
+            ))}
           </div>
         )}
       </div>
 
-      {mainView==="agenda"&&(
+      {/* AGENDA */}
+      {vista==="agenda"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,background:"#fff",borderRadius:14,padding:"10px 14px",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
-            <button onClick={prevPeriodo} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333"}}>‹</button>
+            <button onClick={()=>{
+              if(modo==="dia")setFecha(sumD(fecha,-1));
+              else if(modo==="semana")setFecha(sumD(lunSem(fecha),-7));
+              else{const d=pD(fecha);d.setMonth(d.getMonth()-1);setFecha(d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()));}
+            }} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333"}}>‹</button>
             <div style={{textAlign:"center",flex:1}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#222",textTransform:"capitalize"}}>{tituloNavegacion()}</div>
-              {!isToday&&<button onClick={function(){setDate(fmtDate(new Date()));}} style={{background:"none",border:"none",color:"#e74c3c",fontSize:11,cursor:"pointer",fontWeight:600}}>← Hoy</button>}
+              <div style={{fontSize:12,fontWeight:600,color:"#222",textTransform:"capitalize"}}>
+                {modo==="dia"?fmtL(fecha):modo==="semana"?(()=>{const s=lunSem(fecha),e=sumD(s,6);return pD(s).toLocaleDateString("es-AR",{day:"numeric",month:"short"})+" - "+pD(e).toLocaleDateString("es-AR",{day:"numeric",month:"short",year:"numeric"});})():pD(fecha).toLocaleDateString("es-AR",{month:"long",year:"numeric"})}
+              </div>
+              {!esHoy&&<button onClick={()=>setFecha(hoy())} style={{background:"none",border:"none",color:"#e74c3c",fontSize:11,cursor:"pointer",fontWeight:600}}>← Hoy</button>}
             </div>
-            <button onClick={nextPeriodo} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333"}}>›</button>
+            <button onClick={()=>{
+              if(modo==="dia")setFecha(sumD(fecha,1));
+              else if(modo==="semana")setFecha(sumD(lunSem(fecha),7));
+              else{const d=pD(fecha);d.setMonth(d.getMonth()+1);setFecha(d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()));}
+            }} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333"}}>›</button>
           </div>
+
           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
-            {ESTADOS.map(function(e){return <span key={e.id} style={{background:e.color,color:e.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{e.label}</span>;})}
+            {ESTADOS.map(e=><span key={e.id} style={{background:e.color,color:e.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{e.label}</span>)}
           </div>
-          {loading?<div style={{textAlign:"center",padding:"40px 0",color:"#aaa"}}>Cargando...</div>:(
-            vistaAgenda==="dia"?(
+
+          {cargando?<div style={{textAlign:"center",padding:"40px 0",color:"#aaa"}}>Cargando...</div>:(
+            modo==="dia"?(
               <div>
-                {servicios.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14}}>No hay servicios para este día</div>
-                  :servicios.map(function(s){return <ServicioCard key={s.id} s={s} onEditar={openEditar} onEliminar={setConfirmDel}/>;})}
+                {items.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14}}>No hay servicios para este día</div>:items.map(s=><Tarjeta key={s.id} s={s}/>)}
               </div>
             ):(
               <div>
-                {getDias().map(function(dia){
-                  var srvs=serviciosPorFecha[dia]||[];
+                {getDias().map(dia=>{
+                  const srvs=porFecha[dia]||[];
                   return (
                     <div key={dia} style={{marginBottom:12}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                        <div style={{fontSize:12,fontWeight:700,color:dia===fmtDate(new Date())?"#e74c3c":"#555",background:"#fff",borderRadius:8,padding:"4px 10px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textTransform:"capitalize"}}>{fmtShort(dia)}</div>
-                        <button onClick={function(){setDate(dia);openNuevo();}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>+ Agregar</button>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <span style={{fontSize:12,fontWeight:700,color:dia===hoy()?"#e74c3c":"#555",background:"#fff",borderRadius:8,padding:"4px 10px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textTransform:"capitalize"}}>{fmtC(dia)}</span>
+                        <button onClick={()=>{setFecha(dia);abrirNuevo();}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>+ Agregar</button>
                       </div>
-                      {srvs.length===0?<div style={{fontSize:12,color:"#ccc",paddingLeft:8,marginBottom:4}}>Sin servicios</div>
-                        :srvs.map(function(s){return <ServicioCard key={s.id} s={s} onEditar={openEditar} onEliminar={setConfirmDel}/>;})}
+                      {srvs.length===0?<div style={{fontSize:12,color:"#ccc",paddingLeft:8}}>Sin servicios</div>:srvs.map(s=><Tarjeta key={s.id} s={s}/>)}
                     </div>
                   );
                 })}
               </div>
             )
           )}
-          {vistaAgenda==="dia"&&<button onClick={openNuevo} style={Object.assign({},btnP,{marginTop:6,padding:"14px",fontSize:15,borderRadius:14,boxShadow:"0 4px 15px rgba(231,76,60,0.3)"})}>+ Nuevo servicio</button>}
+          {modo==="dia"&&<button onClick={abrirNuevo} style={{...S.btnR,marginTop:8,boxShadow:"0 4px 15px rgba(231,76,60,0.3)"}}>+ Nuevo servicio</button>}
         </div>
       )}
 
-      {mainView==="buscar"&&(
+      {/* BUSCAR */}
+      {vista==="buscar"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
-            <label style={lbl}>Buscar texto</label>
-            <input value={busqTexto} onChange={function(e){setBusqTexto(e.target.value);}} placeholder="Cliente, remito, factura..." style={inp} />
-            <label style={lbl}>Estado</label>
+            <label style={S.lbl}>Buscar</label>
+            <input value={bTexto} onChange={e=>setBTexto(e.target.value)} placeholder="Cliente, remito, factura..." style={S.inp}/>
+            <label style={S.lbl}>Estado</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-              <button onClick={function(){setBusqEstado("todos");}} style={{background:busqEstado==="todos"?"#333":"#f0f0f0",color:busqEstado==="todos"?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>Todos</button>
-              {ESTADOS.map(function(e){return (
-                <button key={e.id} onClick={function(){setBusqEstado(e.id);}} style={{background:busqEstado===e.id?e.color:"#f0f0f0",color:busqEstado===e.id?e.text:"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{e.label}</button>
-              );})}
+              <button onClick={()=>setBEstado("todos")} style={{background:bEstado==="todos"?"#333":"#f0f0f0",color:bEstado==="todos"?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>Todos</button>
+              {ESTADOS.map(e=><button key={e.id} onClick={()=>setBEstado(e.id)} style={{background:bEstado===e.id?e.color:"#f0f0f0",color:bEstado===e.id?e.text:"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{e.label}</button>)}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <div><label style={lbl}>Desde</label><input type="date" value={busqDesde} onChange={function(e){setBusqDesde(e.target.value);}} style={inp} /></div>
-              <div><label style={lbl}>Hasta</label><input type="date" value={busqHasta} onChange={function(e){setBusqHasta(e.target.value);}} style={inp} /></div>
+              <div><label style={S.lbl}>Desde</label><input type="date" value={bDesde} onChange={e=>setBDesde(e.target.value)} style={S.inp}/></div>
+              <div><label style={S.lbl}>Hasta</label><input type="date" value={bHasta} onChange={e=>setBHasta(e.target.value)} style={S.inp}/></div>
             </div>
           </div>
-          <div style={{fontSize:12,color:"#888",marginBottom:8,paddingLeft:4}}>{serviciosFiltrados.length} resultado{serviciosFiltrados.length!==1?"s":""}</div>
-          {serviciosFiltrados.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa",fontSize:14}}>No se encontraron servicios</div>
-            :serviciosFiltrados.map(function(s){return <ServicioCard key={s.id} s={s} onEditar={openEditar} onEliminar={setConfirmDel}/>;})}
+          <div style={{fontSize:12,color:"#888",marginBottom:8}}>{filtrados.length} resultado{filtrados.length!==1?"s":""}</div>
+          {filtrados.length===0?<div style={{textAlign:"center",padding:"30px 0",color:"#aaa"}}>Sin resultados</div>:filtrados.map(s=><Tarjeta key={s.id} s={s}/>)}
         </div>
       )}
 
-      {mainView==="abm"&&(
+      {/* ABM */}
+      {vista==="abm"&&(
         <div style={{padding:"0 12px"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-            {["equipos","clientes","proveedores","operadores"].map(function(t){return (
-              <button key={t} onClick={function(){setAbmTab(t);setNewItem("");}} style={{padding:"11px",borderRadius:12,border:"none",background:abmTab===t?"#e74c3c":"#fff",color:abmTab===t?"#fff":"#555",cursor:"pointer",fontSize:13,fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",textTransform:"capitalize"}}>{t}</button>
-            );})}
+            {["equipos","clientes","proveedores","operadores"].map(t=>(
+              <button key={t} onClick={()=>{setAbmTab(t);setNuevoItem("");}} style={{padding:"11px",borderRadius:12,border:"none",background:abmTab===t?"#e74c3c":"#fff",color:abmTab===t?"#fff":"#555",cursor:"pointer",fontSize:13,fontWeight:700,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",textTransform:"capitalize"}}>{t}</button>
+            ))}
           </div>
           <div style={{marginBottom:12}}>
-            {listas[abmTab].length===0&&!abmLoading&&<div style={{textAlign:"center",padding:"20px 0",color:"#aaa",fontSize:14}}>No hay {abmTab} cargados</div>}
-            {listas[abmTab].map(function(item){return (
-              <div key={item.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#fff",borderRadius:12,marginBottom:7,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-                <span style={{fontSize:14,color:"#222",fontWeight:500}}>{item.nombre}</span>
-                <button onClick={function(){removeAbm(item.id);}} style={{background:"#fff0f0",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:20,borderRadius:8,padding:"1px 8px"}}>×</button>
+            {listas[abmTab].map(it=>(
+              <div key={it.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"#fff",borderRadius:12,marginBottom:7,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+                <span style={{fontSize:14,color:"#222",fontWeight:500}}>{it.nombre}</span>
+                <button onClick={()=>delAbm(it.id)} style={{background:"#fff0f0",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:20,borderRadius:8,padding:"1px 8px"}}>×</button>
               </div>
-            );})}
+            ))}
+            {listas[abmTab].length===0&&<div style={{textAlign:"center",padding:"20px 0",color:"#aaa",fontSize:14}}>Sin registros</div>}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <input value={newItem} onChange={function(e){setNewItem(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")addAbm();}} placeholder={"Nuevo "+abmTab.slice(0,-1)+"..."} style={Object.assign({},inp,{marginBottom:0,flex:1,borderRadius:12})} />
-            <button onClick={addAbm} disabled={abmLoading} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"0 18px",fontSize:14,fontWeight:700,cursor:"pointer"}}>{abmLoading?"...":"Agregar"}</button>
+            <input value={nuevoItem} onChange={e=>setNuevoItem(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addAbm()} placeholder={"Nuevo "+abmTab.slice(0,-1)+"..."} style={{...S.inp,marginBottom:0,flex:1}}/>
+            <button onClick={addAbm} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"0 18px",fontSize:14,fontWeight:700,cursor:"pointer"}}>+</button>
           </div>
         </div>
       )}
 
-      {modal==="servicio"&&form&&(
+      {/* MODAL */}
+      {modal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:100}}>
           <div style={{background:"#f5f5f7",borderRadius:"20px 20px 0 0",padding:"20px 16px",width:"100%",maxHeight:"93vh",overflowY:"auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <span style={{fontSize:17,fontWeight:700,color:"#222"}}>{editId?"Editar":"Nuevo"} {esRecordatorio?"recordatorio":"servicio"}</span>
-              <button onClick={function(){setModal(null);setForm(null);setEditId(null);}} style={{background:"#e0e0e0",border:"none",fontSize:16,cursor:"pointer",borderRadius:20,width:30,height:30}}>×</button>
+              <span style={{fontSize:17,fontWeight:700,color:"#222"}}>{editando?"Editar":"Nuevo"} {esRec?"recordatorio":"servicio"}</span>
+              <button onClick={cerrarModal} style={{background:"#e0e0e0",border:"none",fontSize:18,cursor:"pointer",borderRadius:20,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
-            <label style={lbl}>Tipo</label>
+
+            <label style={S.lbl}>Tipo</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
-              {ESTADOS.map(function(e){return (
-                <button key={e.id} onClick={function(){setForm(function(f){return Object.assign({},f,{estado:e.id});});}} style={{background:form.estado===e.id?e.color:"#fff",color:form.estado===e.id?e.text:"#666",border:"2px solid "+e.color,borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{e.label}</button>
-              );})}
+              {ESTADOS.map(e=>(
+                <button key={e.id} onClick={()=>setFEstado(e.id)} style={{background:fEstado===e.id?e.color:"#fff",color:fEstado===e.id?e.text:"#666",border:"2px solid "+e.color,borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{e.label}</button>
+              ))}
             </div>
-            {esRecordatorio?(
+
+            {esRec?(
               <div>
-                <label style={lbl}>Tarea / Nota</label>
-                <textarea value={form.recordatorio_texto} onChange={function(e){setForm(function(f){return Object.assign({},f,{recordatorio_texto:e.target.value});});}} placeholder="Escribí la tarea o recordatorio..." rows={4} style={Object.assign({},inp,{resize:"vertical"})} />
+                <label style={S.lbl}>Tarea / Nota</label>
+                <textarea value={fRecordatorio} onChange={e=>setFRecordatorio(e.target.value)} placeholder="Escribí la tarea o recordatorio..." rows={4} style={{...S.inp,resize:"vertical"}}/>
               </div>
             ):(
               <div>
-                <label style={lbl}>Hora de llegada</label>
-                <input type="time" value={form.hora} onChange={function(e){setForm(function(f){return Object.assign({},f,{hora:e.target.value});});}} style={inp} />
-                <label style={lbl}>Servicios</label>
-                <ServiciosMultiples items={form.servicios_items} onChange={function(v){setForm(function(f){return Object.assign({},f,{servicios_items:v});});}} equipos={listas.equipos} />
-                <label style={lbl}>Cliente</label>
-                <SelectConAgregar value={form.cliente} onChange={function(v){setForm(function(f){return Object.assign({},f,{cliente:v});});}} opciones={listas.clientes} placeholder="Seleccionar cliente..." onAgregar={agregarCliente} tipo="cliente" />
-                <label style={lbl}>Dirección</label>
-                <input placeholder="Dirección de trabajo" value={form.direccion} onChange={function(e){setForm(function(f){return Object.assign({},f,{direccion:e.target.value});});}} style={inp} />
-                <label style={lbl}>Proveedor</label>
-                <SelectConAgregar value={form.proveedor} onChange={function(v){setForm(function(f){return Object.assign({},f,{proveedor:v});});}} opciones={listas.proveedores} placeholder="Seleccionar proveedor..." onAgregar={agregarProveedor} tipo="proveedor" />
-                <label style={lbl}>N° de equipo asignado</label>
-                <input placeholder="Ej: 22, 29..." value={form.nro_equipo} onChange={function(e){setForm(function(f){return Object.assign({},f,{nro_equipo:e.target.value});});}} style={inp} />
-                <label style={lbl}>Operador</label>
-                <select value={form.operador} onChange={function(e){setForm(function(f){return Object.assign({},f,{operador:e.target.value});});}} style={inp}>
+                <label style={S.lbl}>Hora de llegada</label>
+                <input type="time" value={fHora} onChange={e=>setFHora(e.target.value)} style={S.inp}/>
+
+                <label style={S.lbl}>Servicios</label>
+                {fServicios.map(it=>(
+                  <div key={it.id} style={{display:"flex",gap:6,marginBottom:6}}>
+                    <span style={{flex:1,background:"#fff",border:"1px solid #ddd",borderRadius:9,padding:"8px 12px",fontSize:14}}>{it.nombre}</span>
+                    <button onClick={()=>setFServicios(fServicios.filter(x=>x.id!==it.id))} style={{background:"#fff0f0",border:"none",color:"#e74c3c",borderRadius:9,padding:"0 12px",cursor:"pointer",fontWeight:700}}>✕</button>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:6,marginBottom:10}}>
+                  <select value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+                    <option value="">Seleccionar servicio...</option>
+                    {listas.equipos.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
+                  </select>
+                  <button onClick={()=>{if(nuevoServicio){setFServicios([...fServicios,{id:Date.now()+"",nombre:nuevoServicio}]);setNuevoServicio("");}}} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                </div>
+                <div style={{display:"flex",gap:6,marginBottom:10}}>
+                  <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>e.key==="Enter"&&agregarServicio()} placeholder="O escribir a mano..." style={{...S.inp,marginBottom:0,flex:1}}/>
+                  <button onClick={agregarServicio} style={{background:"#555",color:"#fff",border:"none",borderRadius:10,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>+</button>
+                </div>
+
+                <label style={S.lbl}>Cliente</label>
+                {modoNuevoCliente?(
+                  <div style={{display:"flex",gap:6,marginBottom:10}}>
+                    <input autoFocus value={nuevoCliente} onChange={e=>setNuevoCliente(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoCliente()} placeholder="Nuevo cliente..." style={{...S.inp,marginBottom:0,flex:1}}/>
+                    <button onClick={guardarNuevoCliente} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
+                    <button onClick={()=>setModoNuevoCliente(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
+                  </div>
+                ):(
+                  <div style={{display:"flex",gap:6,marginBottom:10}}>
+                    <select value={fCliente} onChange={e=>setFCliente(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+                      <option value="">Seleccionar cliente...</option>
+                      {listas.clientes.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
+                    </select>
+                    <button onClick={()=>setModoNuevoCliente(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                  </div>
+                )}
+
+                <label style={S.lbl}>Dirección</label>
+                <input placeholder="Dirección de trabajo" value={fDireccion} onChange={e=>setFDireccion(e.target.value)} style={S.inp}/>
+
+                <label style={S.lbl}>Proveedor</label>
+                {modoNuevoProveedor?(
+                  <div style={{display:"flex",gap:6,marginBottom:10}}>
+                    <input autoFocus value={nuevoProveedor} onChange={e=>setNuevoProveedor(e.target.value)} onKeyDown={e=>e.key==="Enter"&&guardarNuevoProveedor()} placeholder="Nuevo proveedor..." style={{...S.inp,marginBottom:0,flex:1}}/>
+                    <button onClick={guardarNuevoProveedor} style={{background:"#2ecc71",color:"#fff",border:"none",borderRadius:9,padding:"0 12px",fontWeight:700,cursor:"pointer"}}>✓</button>
+                    <button onClick={()=>setModoNuevoProveedor(false)} style={{background:"#eee",border:"none",borderRadius:9,padding:"0 10px",cursor:"pointer"}}>✕</button>
+                  </div>
+                ):(
+                  <div style={{display:"flex",gap:6,marginBottom:10}}>
+                    <select value={fProveedor} onChange={e=>setFProveedor(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+                      <option value="">Seleccionar proveedor...</option>
+                      {listas.proveedores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
+                    </select>
+                    <button onClick={()=>setModoNuevoProveedor(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18}}>+</button>
+                  </div>
+                )}
+
+                <label style={S.lbl}>N° de equipo asignado</label>
+                <input placeholder="Ej: 22, 29..." value={fNroEq} onChange={e=>setFNroEq(e.target.value)} style={S.inp}/>
+
+                <label style={S.lbl}>Operador</label>
+                <select value={fOperador} onChange={e=>setFOperador(e.target.value)} style={S.inp}>
                   <option value="">Seleccionar...</option>
-                  {listas.operadores.map(function(x){return <option key={x.id} value={x.nombre}>{x.nombre}</option>;})}
+                  {listas.operadores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                 </select>
-                <label style={lbl}>N° de remito</label>
-                <input placeholder="Número de remito" value={form.remito} onChange={function(e){setForm(function(f){return Object.assign({},f,{remito:e.target.value});});}} style={inp} />
-                <label style={lbl}>N° de factura</label>
-                <input placeholder="Número de factura" value={form.factura} onChange={function(e){setForm(function(f){return Object.assign({},f,{factura:e.target.value});});}} style={inp} />
-                <label style={lbl}>N° de cotización</label>
-                <input placeholder="Número de cotización" value={form.cotizacion} onChange={function(e){setForm(function(f){return Object.assign({},f,{cotizacion:e.target.value});});}} style={inp} />
-                <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"12px",marginBottom:9}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#333",marginBottom:10}}>💰 Lista N</div>
-                  <label style={lbl}>Precio</label>
-                  <input placeholder="Ej: 15000" value={form.lista_n_precio} onChange={function(e){setForm(function(f){return Object.assign({},f,{lista_n_precio:e.target.value});});}} style={inp} />
-                  <button onClick={function(){setForm(function(f){return Object.assign({},f,{lista_n_cobrado:!f.lista_n_cobrado});});}} style={{background:form.lista_n_cobrado?"#2ecc71":"#f0f0f0",color:form.lista_n_cobrado?"#fff":"#555",border:"none",borderRadius:20,padding:"7px 16px",fontSize:13,cursor:"pointer",fontWeight:700,marginBottom:9}}>
-                    {form.lista_n_cobrado?"✅ Cobrado":"⏳ Pendiente"}
+
+                <label style={S.lbl}>N° de remito</label>
+                <input placeholder="Número de remito" value={fRemito} onChange={e=>setFRemito(e.target.value)} style={S.inp}/>
+
+                <label style={S.lbl}>N° de factura</label>
+                <input placeholder="Número de factura" value={fFactura} onChange={e=>setFFactura(e.target.value)} style={S.inp}/>
+
+                <label style={S.lbl}>N° de cotización</label>
+                <input placeholder="Número de cotización" value={fCotizacion} onChange={e=>setFCotizacion(e.target.value)} style={S.inp}/>
+
+                <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"14px",marginBottom:10}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:10}}>💰 Lista N</div>
+                  <label style={S.lbl}>Precio</label>
+                  <input placeholder="Ej: 15000" value={fPrecio} onChange={e=>setFPrecio(e.target.value)} style={S.inp}/>
+                  <button onClick={()=>setFCobrado(!fCobrado)} style={{background:fCobrado?"#2ecc71":"#f0f0f0",color:fCobrado?"#fff":"#555",border:"none",borderRadius:20,padding:"8px 16px",fontSize:13,cursor:"pointer",fontWeight:700,marginBottom:10,display:"block"}}>
+                    {fCobrado?"✅ Cobrado":"⏳ Pendiente"}
                   </button>
-                  {form.lista_n_cobrado&&(
+                  {fCobrado&&(
                     <div>
-                      <label style={lbl}>Fecha de cobro</label>
-                      <input type="date" value={form.lista_n_fecha_cobro} onChange={function(e){setForm(function(f){return Object.assign({},f,{lista_n_fecha_cobro:e.target.value});});}} style={inp} />
+                      <label style={S.lbl}>Fecha de cobro</label>
+                      <input type="date" value={fFechaCobro} onChange={e=>setFFechaCobro(e.target.value)} style={S.inp}/>
                     </div>
                   )}
                 </div>
               </div>
             )}
+
             <div style={{display:"flex",gap:10,marginTop:8}}>
-              <button onClick={function(){setModal(null);setForm(null);setEditId(null);}} style={Object.assign({},btnG,{flex:1})}>Cancelar</button>
-              <button onClick={saveServicio} disabled={saving} style={Object.assign({},btnP,{flex:2,opacity:saving?0.7:1})}>{saving?"Guardando...":"Guardar"}</button>
+              <button onClick={cerrarModal} style={{...S.btnG,flex:1}}>Cancelar</button>
+              <button onClick={guardar} disabled={guardando} style={{...S.btnR,flex:2,opacity:guardando?0.7:1}}>{guardando?"Guardando...":"Guardar"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {confirmDel&&(
+      {/* CONFIRMAR BORRAR */}
+      {borrar&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:24}}>
           <div style={{background:"#fff",borderRadius:18,padding:24,width:"100%",maxWidth:320}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Eliminar?</div>
             <div style={{fontSize:13,color:"#888",marginBottom:22}}>Esta acción no se puede deshacer.</div>
             <div style={{display:"flex",gap:10}}>
-              <button onClick={function(){setConfirmDel(null);}} style={Object.assign({},btnG,{flex:1})}>Cancelar</button>
-              <button onClick={function(){deleteServicio(confirmDel);}} style={Object.assign({},btnP,{flex:1})}>Eliminar</button>
+              <button onClick={()=>setBorrar(null)} style={{...S.btnG,flex:1}}>Cancelar</button>
+              <button onClick={()=>eliminar(borrar)} style={{...S.btnR,flex:1}}>Eliminar</button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

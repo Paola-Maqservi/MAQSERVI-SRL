@@ -207,7 +207,7 @@ function ServicioCard({ s, onEditar, onEliminar }) {
   );
 }
 
-export default function App() {
+function App() {
   const [mainView, setMainView] = useState("agenda");
   const [vistaAgenda, setVistaAgenda] = useState("dia");
   const [date, setDate] = useState(fmtDate(new Date()));

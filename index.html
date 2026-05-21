@@ -20,6 +20,7 @@
 const SB = "https://rlacqaxsedwunmlqqzoo.supabase.co";
 const KEY = "sb_publishable_BJcqG7mEY4yKvLkzRRAsTA_zasGKqKL";
 const HD = {"Content-Type":"application/json","apikey":KEY,"Authorization":"Bearer "+KEY};
+const PASS = "Ayira2413";
 
 async function GET(t,q){const r=await fetch(SB+"/rest/v1/"+t+(q||""),{headers:HD});return r.json();}
 async function POST(t,b){const r=await fetch(SB+"/rest/v1/"+t,{method:"POST",headers:{...HD,"Prefer":"return=representation"},body:JSON.stringify(b)});return r.json();}
@@ -51,6 +52,29 @@ const INP={width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",
 const LBL={fontSize:11,color:"#888",marginBottom:4,display:"block",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5};
 const BTNR={background:"#e74c3c",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%"};
 const BTNG={background:"#fff",color:"#555",border:"1px solid #ddd",borderRadius:12,padding:"14px",fontSize:15,cursor:"pointer",width:"100%"};
+
+function Login({onLogin}) {
+  const [pwd,setPwd]=React.useState("");
+  const [error,setError]=React.useState(false);
+  function intentar(){
+    if(pwd===PASS){onLogin();}
+    else{setError(true);setPwd("");}
+  }
+  return (
+    <div style={{maxWidth:360,margin:"80px auto 0",padding:"0 24px"}}>
+      <div style={{background:"linear-gradient(135deg,#e74c3c,#c0392b)",borderRadius:20,padding:"32px 24px",boxShadow:"0 8px 32px rgba(231,76,60,0.3)",textAlign:"center",color:"#fff",marginBottom:24}}>
+        <div style={{fontSize:28,fontWeight:700,marginBottom:4}}>MAQSERVI SRL</div>
+        <div style={{fontSize:13,opacity:0.85}}>Gestión de Alquileres</div>
+      </div>
+      <div style={{background:"#fff",borderRadius:16,padding:"24px",boxShadow:"0 2px 12px rgba(0,0,0,0.08)"}}>
+        <div style={{fontSize:15,fontWeight:600,color:"#222",marginBottom:16,textAlign:"center"}}>🔒 Ingresá tu contraseña</div>
+        <input type="password" value={pwd} onChange={e=>{setPwd(e.target.value);setError(false);}} onKeyDown={e=>e.key==="Enter"&&intentar()} placeholder="Contraseña..." style={{width:"100%",padding:"12px 14px",fontSize:15,border:"2px solid "+(error?"#e74c3c":"#ddd"),borderRadius:10,boxSizing:"border-box",marginBottom:8,outline:"none"}}/>
+        {error&&<div style={{color:"#e74c3c",fontSize:13,marginBottom:8,textAlign:"center"}}>Contraseña incorrecta</div>}
+        <button onClick={intentar} style={{...BTNR,marginTop:4}}>Ingresar</button>
+      </div>
+    </div>
+  );
+}
 
 function Tarjeta({s, onEditar, onBorrar}) {
   const est=getEst(s.estado);
@@ -85,24 +109,26 @@ function Tarjeta({s, onEditar, onBorrar}) {
           <button onClick={()=>onBorrar(s.id)} style={{background:"#fff0f0",border:"none",borderRadius:8,padding:"5px 8px",cursor:"pointer"}}>🗑️</button>
         </div>
       </div>
-
       {srvs.length>0&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
-          {srvs.map((srv,i)=>(
-            <span key={i} style={{background:"#fde8e8",color:"#c0392b",fontSize:12,padding:"3px 10px",borderRadius:20,fontWeight:600}}>🔧 {srv}</span>
-          ))}
+          {srvs.map((srv,i)=><span key={i} style={{background:"#fde8e8",color:"#c0392b",fontSize:12,padding:"3px 10px",borderRadius:20,fontWeight:600}}>🔧 {srv}</span>)}
         </div>
       )}
-
       {s.cliente&&<div style={{fontSize:15,fontWeight:700,color:"#222",marginBottom:3}}>{s.cliente}</div>}
       {s.direccion&&<div style={{fontSize:12,color:"#666",marginBottom:5}}>📍 {s.direccion}</div>}
-
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 14px",fontSize:12,marginBottom:4}}>
         {[["Proveedor",s.proveedor],["N° Equipo",s.nro_equipo],["Operador",s.operador],["Remito",s.remito],["Factura",s.factura],["Cotización",s.cotizacion]].filter(x=>x[1]).map(x=>(
           <span key={x[0]} style={{color:"#888"}}>{x[0]}: <b style={{color:"#333"}}>{x[1]}</b></span>
         ))}
       </div>
-
+      {(s.contacto_nombre||s.contacto_celular)&&(
+        <div style={{background:"#f0f7ff",border:"1px solid #d0e8ff",borderRadius:8,padding:"6px 10px",marginTop:5,fontSize:12}}>
+          <span style={{fontWeight:700,color:"#2980b9"}}>👤 Contacto en obra: </span>
+          {s.contacto_nombre&&<span style={{color:"#222",fontWeight:600}}>{s.contacto_nombre}</span>}
+          {s.contacto_nombre&&s.contacto_celular&&<span style={{color:"#888"}}> · </span>}
+          {s.contacto_celular&&<a href={"tel:"+s.contacto_celular} style={{color:"#e74c3c",fontWeight:600,textDecoration:"none"}}>📞 {s.contacto_celular}</a>}
+        </div>
+      )}
       {s.lista_n_precio&&(
         <div style={{marginTop:6,background:s.lista_n_cobrado?"#eafaf1":"#fef9e7",border:"1px solid "+(s.lista_n_cobrado?"#2ecc71":"#f1c40f"),borderRadius:8,padding:"6px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:12,fontWeight:700}}>💰 Lista N: ${s.lista_n_precio}</span>
@@ -114,6 +140,7 @@ function Tarjeta({s, onEditar, onBorrar}) {
 }
 
 function App() {
+  const [logueado,setLogueado]=React.useState(false);
   const [vista,setVista]=React.useState("agenda");
   const [modo,setModo]=React.useState("dia");
   const [fecha,setFecha]=React.useState(hoy());
@@ -154,6 +181,10 @@ function App() {
   const [nuevoProv,setNuevoProv]=React.useState("");
   const [modoNuevoCli,setModoNuevoCli]=React.useState(false);
   const [modoNuevoProv,setModoNuevoProv]=React.useState(false);
+  const [fContactoNombre,setFContactoNombre]=React.useState("");
+  const [fContactoCelular,setFContactoCelular]=React.useState("");
+
+  if(!logueado) return <Login onLogin={()=>setLogueado(true)}/>;
 
   function getRango(){
     if(modo==="dia")return[fecha,fecha];
@@ -189,6 +220,7 @@ function App() {
     setFNroEq("");setFOperador("");setFRemito("");setFFactura("");setFCotizacion("");
     setFPrecio("");setFCobrado(false);setFFechaCobro("");setFRecordatorio("");
     setFServicios([]);setSelSrv("");setManualSrv("");
+    setFContactoNombre("");setFContactoCelular("");
     setModoNuevoCli(false);setModoNuevoProv(false);
     setModal(true);
   }
@@ -201,6 +233,7 @@ function App() {
     setFCotizacion(s.cotizacion||"");setFPrecio(s.lista_n_precio||"");setFCobrado(s.lista_n_cobrado||false);
     setFFechaCobro(s.lista_n_fecha_cobro||"");setFRecordatorio(s.recordatorio_texto||"");
     setFServicios(parseSrvs(s.servicios_lista));
+    setFContactoNombre(s.contacto_nombre||"");setFContactoCelular(s.contacto_celular||"");
     setSelSrv("");setManualSrv("");setModoNuevoCli(false);setModoNuevoProv(false);
     setModal(true);
   }
@@ -226,18 +259,14 @@ function App() {
       lista_n_precio:fPrecio, lista_n_cobrado:fCobrado,
       lista_n_fecha_cobro:fFechaCobro||null, recordatorio_texto:fRecordatorio,
       servicios_lista:joinSrvs(fServicios),
+      contacto_nombre:fContactoNombre, contacto_celular:fContactoCelular,
       fecha:fecha
     };
-    if(editId){
-      await PATCH("servicios",editId,payload);
-    } else {
-      await POST("servicios",payload);
-    }
+    if(editId){await PATCH("servicios",editId,payload);}
+    else{await POST("servicios",payload);}
     await recargar();
     if(vista==="buscar") await recargarTodos();
-    setGuardando(false);
-    setModal(false);
-    setEditId(null);
+    setGuardando(false); setModal(false); setEditId(null);
   }
 
   async function eliminar(id){
@@ -249,15 +278,13 @@ function App() {
 
   async function guardarNuevoCli(){
     const v=nuevoCliente.trim(); if(!v) return;
-    await POST("clientes",{nombre:v});
-    await recargarListas();
+    await POST("clientes",{nombre:v}); await recargarListas();
     setFCliente(v); setNuevoCliente(""); setModoNuevoCli(false);
   }
 
   async function guardarNuevoProv(){
     const v=nuevoProv.trim(); if(!v) return;
-    await POST("proveedores",{nombre:v});
-    await recargarListas();
+    await POST("proveedores",{nombre:v}); await recargarListas();
     setFProveedor(v); setNuevoProv(""); setModoNuevoProv(false);
   }
 
@@ -331,11 +358,9 @@ function App() {
               else{const d=pD(fecha);d.setMonth(d.getMonth()+1);setFecha(d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()));}
             }} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#333"}}>›</button>
           </div>
-
           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
             {ESTADOS.map(e=><span key={e.id} style={{background:e.color,color:e.text,fontSize:10,padding:"3px 9px",borderRadius:20,fontWeight:700}}>{e.label}</span>)}
           </div>
-
           {cargando?<div style={{textAlign:"center",padding:"40px 0",color:"#aaa"}}>Cargando...</div>:(
             modo==="dia"?(
               <div>
@@ -377,7 +402,7 @@ function App() {
               <div><label style={LBL}>Hasta</label><input type="date" value={bHasta} onChange={e=>setBHasta(e.target.value)} style={INP}/></div>
             </div>
             <label style={LBL}>Lista N</label>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {[["todos","Todos","#333"],["con","Con Lista N","#8e44ad"],["cobrado","✅ Cobrados","#27ae60"],["pendiente","⏳ Pendientes","#e67e22"]].map(([val,lbl2,col])=>(
                 <button key={val} onClick={()=>setBListaN(val)} style={{background:bListaN===val?col:"#f0f0f0",color:bListaN===val?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:700}}>{lbl2}</button>
               ))}
@@ -504,6 +529,12 @@ function App() {
                   <option value="">Seleccionar...</option>
                   {listas.operadores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
                 </select>
+
+                <label style={LBL}>Contacto en obra</label>
+                <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"12px",marginBottom:10}}>
+                  <input placeholder="Nombre del contacto" value={fContactoNombre} onChange={e=>setFContactoNombre(e.target.value)} style={{...INP,marginBottom:8}}/>
+                  <input placeholder="Celular" type="tel" value={fContactoCelular} onChange={e=>setFContactoCelular(e.target.value)} style={{...INP,marginBottom:0}}/>
+                </div>
 
                 <label style={LBL}>N° de remito</label>
                 <input placeholder="Número de remito" value={fRemito} onChange={e=>setFRemito(e.target.value)} style={INP}/>

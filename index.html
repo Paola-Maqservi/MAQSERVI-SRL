@@ -60,6 +60,8 @@ function Login({onLogin}) {
     if(pwd===PASS){onLogin();}
     else{setError(true);setPwd("");}
   }
+  if(!logueado) return <Login onLogin={()=>setLogueado(true)}/>;
+
   return (
     <div style={{maxWidth:360,margin:"80px auto 0",padding:"0 24px"}}>
       <div style={{background:"linear-gradient(135deg,#e74c3c,#c0392b)",borderRadius:20,padding:"32px 24px",boxShadow:"0 8px 32px rgba(231,76,60,0.3)",textAlign:"center",color:"#fff",marginBottom:24}}>
@@ -183,8 +185,6 @@ function App() {
   const [modoNuevoProv,setModoNuevoProv]=React.useState(false);
   const [fContactoNombre,setFContactoNombre]=React.useState("");
   const [fContactoCelular,setFContactoCelular]=React.useState("");
-
-  if(!logueado) return <Login onLogin={()=>setLogueado(true)}/>;
 
   function getRango(){
     if(modo==="dia")return[fecha,fecha];

@@ -156,6 +156,7 @@ function Main() {
   const [bDesde,setBDesde]=React.useState("");
   const [bHasta,setBHasta]=React.useState("");
   const [bListaN,setBListaN]=React.useState("todos");
+  const [fechaEdit,setFechaEdit]=React.useState(null);
   const [fEstado,setFEstado]=React.useState("confirmado");
   const [fHora,setFHora]=React.useState("");
   const [fCliente,setFCliente]=React.useState("");
@@ -215,6 +216,7 @@ function Main() {
     setFPrecio("");setFCobrado(false);setFFechaCobro("");setFRecordatorio("");
     setFServicios([]);setSelSrv("");setManualSrv("");
     setFContactoNombre("");setFContactoCelular("");
+    setFechaEdit(null);
     setModoNuevoCli(false);setModoNuevoProv(false);
     setModal(true);
   }
@@ -228,6 +230,7 @@ function Main() {
     setFFechaCobro(s.lista_n_fecha_cobro||"");setFRecordatorio(s.recordatorio_texto||"");
     setFServicios(parseSrvs(s.servicios_lista));
     setFContactoNombre(s.contacto_nombre||"");setFContactoCelular(s.contacto_celular||"");
+    setFechaEdit(s.fecha);
     setSelSrv("");setManualSrv("");setModoNuevoCli(false);setModoNuevoProv(false);
     setModal(true);
   }
@@ -254,7 +257,7 @@ function Main() {
       lista_n_fecha_cobro:fFechaCobro||null,recordatorio_texto:fRecordatorio,
       servicios_lista:joinSrvs(fServicios),
       contacto_nombre:fContactoNombre,contacto_celular:fContactoCelular,
-      fecha:fecha
+      fecha: fechaEdit || fecha
     };
     if(editId){await PATCH("servicios",editId,payload);}
     else{await POST("servicios",payload);}

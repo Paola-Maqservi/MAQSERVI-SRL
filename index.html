@@ -257,7 +257,7 @@ function Main() {
       lista_n_fecha_cobro:fFechaCobro||null,recordatorio_texto:fRecordatorio,
       servicios_lista:joinSrvs(fServicios),
       contacto_nombre:fContactoNombre,contacto_celular:fContactoCelular,
-      fecha: fechaEdit || fecha
+      fecha: editId ? fechaEdit : fecha
     };
     if(editId){await PATCH("servicios",editId,payload);}
     else{await POST("servicios",payload);}

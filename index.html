@@ -156,7 +156,6 @@ function Main() {
   const [bDesde,setBDesde]=React.useState("");
   const [bHasta,setBHasta]=React.useState("");
   const [bListaN,setBListaN]=React.useState("todos");
-  const [fechaEdit,setFechaEdit]=React.useState(null);
   const [fEstado,setFEstado]=React.useState("confirmado");
   const [fHora,setFHora]=React.useState("");
   const [fCliente,setFCliente]=React.useState("");
@@ -180,6 +179,11 @@ function Main() {
   const [modoNuevoProv,setModoNuevoProv]=React.useState(false);
   const [fContactoNombre,setFContactoNombre]=React.useState("");
   const [fContactoCelular,setFContactoCelular]=React.useState("");
+  // Repetición
+  const [repTipo,setRepTipo]=React.useState("ninguna"); // ninguna | fechas | dias
+  const [repFechas,setRepFechas]=React.useState([]);
+  const [repFechaInput,setRepFechaInput]=React.useState("");
+  const [repCantDias,setRepCantDias]=React.useState("");
 
   function getRango(){
     if(modo==="dia")return[fecha,fecha];
@@ -209,17 +213,17 @@ function Main() {
   React.useEffect(()=>{recargar();},[fecha,modo]);
   React.useEffect(()=>{if(vista==="buscar")recargarTodos();},[vista]);
 
-  function abrirNuevo(){
-    setEditId(null);
+  function resetForm(){
     setFEstado("confirmado");setFHora("");setFCliente("");setFDireccion("");setFProveedor("");
     setFNroEq("");setFOperador("");setFRemito("");setFFactura("");setFCotizacion("");
     setFPrecio("");setFCobrado(false);setFFechaCobro("");setFRecordatorio("");
     setFServicios([]);setSelSrv("");setManualSrv("");
     setFContactoNombre("");setFContactoCelular("");
-    setFechaEdit(null);
     setModoNuevoCli(false);setModoNuevoProv(false);
-    setModal(true);
+    setRepTipo("ninguna");setRepFechas([]);setRepFechaInput("");setRepCantDias("");
   }
+
+  function abrirNuevo(){setEditId(null);resetForm();setModal(true);}
 
   function abrirEditar(s){
     setEditId(s.id);
@@ -230,8 +234,8 @@ function Main() {
     setFFechaCobro(s.lista_n_fecha_cobro||"");setFRecordatorio(s.recordatorio_texto||"");
     setFServicios(parseSrvs(s.servicios_lista));
     setFContactoNombre(s.contacto_nombre||"");setFContactoCelular(s.contacto_celular||"");
-    setFechaEdit(s.fecha);
     setSelSrv("");setManualSrv("");setModoNuevoCli(false);setModoNuevoProv(false);
+    setRepTipo("ninguna");setRepFechas([]);setRepFechaInput("");setRepCantDias("");
     setModal(true);
   }
 
@@ -247,9 +251,27 @@ function Main() {
     setManualSrv("");
   }
 
+  function agregarFechaRep(){
+    if(!repFechaInput)return;
+    if(!repFechas.includes(repFechaInput))setRepFechas(prev=>[...prev,repFechaInput]);
+    setRepFechaInput("");
+  }
+
+  function getFechasRepeticion(){
+    if(repTipo==="fechas") return repFechas;
+    if(repTipo==="dias"){
+      const n=parseInt(repCantDias);
+      if(!n||n<1)return[];
+      const fechas=[];
+      for(let i=1;i<=n;i++) fechas.push(sumD(fecha,i));
+      return fechas;
+    }
+    return[];
+  }
+
   async function guardar(){
     setGuardando(true);
-    const payload={
+    const base={
       estado:fEstado,hora:fHora,cliente:fCliente,direccion:fDireccion,
       proveedor:fProveedor,nro_equipo:fNroEq,operador:fOperador,
       remito:fRemito,factura:fFactura,cotizacion:fCotizacion,
@@ -257,10 +279,17 @@ function Main() {
       lista_n_fecha_cobro:fFechaCobro||null,recordatorio_texto:fRecordatorio,
       servicios_lista:joinSrvs(fServicios),
       contacto_nombre:fContactoNombre,contacto_celular:fContactoCelular,
-      fecha: editId ? fechaEdit : fecha
     };
-    if(editId){await PATCH("servicios",editId,payload);}
-    else{await POST("servicios",payload);}
+    if(editId){
+      await PATCH("servicios",editId,base);
+    } else {
+      await POST("servicios",{...base,fecha:fecha});
+      // Repetir en otras fechas
+      const extras=getFechasRepeticion();
+      for(const f of extras){
+        await POST("servicios",{...base,fecha:f});
+      }
+    }
     await recargar();
     if(vista==="buscar")await recargarTodos();
     setGuardando(false);setModal(false);setEditId(null);
@@ -310,6 +339,7 @@ function Main() {
 
   const esHoy=fecha===hoy();
   const esRec=fEstado==="recordatorio";
+  const extrasCount=getFechasRepeticion().length;
 
   return (
     <div style={{maxWidth:480,margin:"0 auto",background:"#f5f5f7",minHeight:"100vh",paddingBottom:80}}>
@@ -454,6 +484,7 @@ function Main() {
               <div>
                 <label style={LBL}>Hora de llegada</label>
                 <input type="time" value={fHora} onChange={e=>setFHora(e.target.value)} style={INP}/>
+
                 <label style={LBL}>Servicios asignados</label>
                 {fServicios.length>0&&(
                   <div style={{background:"#fff",border:"1px solid #e0e0e0",borderRadius:10,padding:"8px 12px",marginBottom:8}}>
@@ -476,6 +507,7 @@ function Main() {
                   <input value={manualSrv} onChange={e=>setManualSrv(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarSrvManual();}} placeholder="O escribir a mano..." style={{...INP,marginBottom:0,flex:1}}/>
                   <button onClick={agregarSrvManual} style={{background:"#777",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",flexShrink:0}}>+</button>
                 </div>
+
                 <label style={LBL}>Cliente</label>
                 {modoNuevoCli?(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
@@ -492,8 +524,10 @@ function Main() {
                     <button onClick={()=>setModoNuevoCli(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:22,flexShrink:0}}>+</button>
                   </div>
                 )}
+
                 <label style={LBL}>Dirección</label>
                 <input placeholder="Dirección de trabajo" value={fDireccion} onChange={e=>setFDireccion(e.target.value)} style={INP}/>
+
                 <label style={LBL}>Proveedor</label>
                 {modoNuevoProv?(
                   <div style={{display:"flex",gap:6,marginBottom:10}}>
@@ -510,24 +544,29 @@ function Main() {
                     <button onClick={()=>setModoNuevoProv(true)} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:22,flexShrink:0}}>+</button>
                   </div>
                 )}
+
                 <label style={LBL}>N° de equipo asignado</label>
                 <input placeholder="Ej: 22, 29..." value={fNroEq} onChange={e=>setFNroEq(e.target.value)} style={INP}/>
+
                 <label style={LBL}>Operador</label>
-                <select value={fOperador} onChange={e=>setFOperador(e.target.value)} style={INP}>
-                  <option value="">Seleccionar...</option>
-                  {listas.operadores.map(x=><option key={x.id} value={x.nombre}>{x.nombre}</option>)}
-                </select>
+                <input placeholder="Escribí el operador o combinación..." value={fOperador} onChange={e=>setFOperador(e.target.value)} list="lista-operadores" style={INP}/>
+                <datalist id="lista-operadores">
+                  {listas.operadores.map(x=><option key={x.id} value={x.nombre}/>)}
+                </datalist>
+
                 <label style={LBL}>Contacto en obra</label>
                 <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"12px",marginBottom:10}}>
                   <input placeholder="Nombre del contacto" value={fContactoNombre} onChange={e=>setFContactoNombre(e.target.value)} style={{...INP,marginBottom:8}}/>
                   <input placeholder="Celular" type="tel" value={fContactoCelular} onChange={e=>setFContactoCelular(e.target.value)} style={{...INP,marginBottom:0}}/>
                 </div>
+
                 <label style={LBL}>N° de remito</label>
                 <input placeholder="Número de remito" value={fRemito} onChange={e=>setFRemito(e.target.value)} style={INP}/>
                 <label style={LBL}>N° de factura</label>
                 <input placeholder="Número de factura" value={fFactura} onChange={e=>setFFactura(e.target.value)} style={INP}/>
                 <label style={LBL}>N° de cotización</label>
                 <input placeholder="Número de cotización" value={fCotizacion} onChange={e=>setFCotizacion(e.target.value)} style={INP}/>
+
                 <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"14px",marginBottom:10}}>
                   <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:10}}>💰 Lista N</div>
                   <label style={LBL}>Precio</label>
@@ -542,11 +581,50 @@ function Main() {
                     </div>
                   )}
                 </div>
+
+                {/* REPETICIÓN - solo para nuevo servicio */}
+                {!editId&&(
+                  <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"14px",marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:10}}>🔁 Repetir servicio en otras fechas</div>
+                    <div style={{display:"flex",gap:6,marginBottom:12}}>
+                      {[["ninguna","No repetir"],["fechas","Fechas específicas"],["dias","Cantidad de días"]].map(([val,lbl2])=>(
+                        <button key={val} onClick={()=>setRepTipo(val)} style={{flex:1,padding:"8px 4px",borderRadius:9,border:"none",background:repTipo===val?"#e74c3c":"#f0f0f0",color:repTipo===val?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:700}}>{lbl2}</button>
+                      ))}
+                    </div>
+                    {repTipo==="fechas"&&(
+                      <div>
+                        <div style={{display:"flex",gap:6,marginBottom:8}}>
+                          <input type="date" value={repFechaInput} onChange={e=>setRepFechaInput(e.target.value)} style={{...INP,marginBottom:0,flex:1}}/>
+                          <button onClick={agregarFechaRep} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:9,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18,flexShrink:0}}>+</button>
+                        </div>
+                        {repFechas.length>0&&(
+                          <div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 10px"}}>
+                            {repFechas.map((f,i)=>(
+                              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
+                                <span style={{fontSize:13,color:"#333"}}>{fmtC(f)}</span>
+                                <button onClick={()=>setRepFechas(repFechas.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:16,fontWeight:700}}>×</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {repTipo==="dias"&&(
+                      <div>
+                        <label style={LBL}>Repetir los próximos X días</label>
+                        <input type="number" min="1" max="365" placeholder="Ej: 30" value={repCantDias} onChange={e=>setRepCantDias(e.target.value)} style={INP}/>
+                        {repCantDias>0&&<div style={{fontSize:12,color:"#27ae60",fontWeight:600}}>✅ Se va a crear en {repCantDias} días adicionales</div>}
+                      </div>
+                    )}
+                    {extrasCount>0&&<div style={{marginTop:8,fontSize:12,color:"#8e44ad",fontWeight:600}}>🔁 Total: 1 servicio original + {extrasCount} copias = {extrasCount+1} servicios</div>}
+                  </div>
+                )}
               </div>
             )}
+
             <div style={{display:"flex",gap:10,marginTop:8}}>
               <button onClick={()=>setModal(false)} style={{...BTNG,flex:1}}>Cancelar</button>
-              <button onClick={guardar} disabled={guardando} style={{...BTNR,flex:2,opacity:guardando?0.7:1}}>{guardando?"Guardando...":"Guardar"}</button>
+              <button onClick={guardar} disabled={guardando} style={{...BTNR,flex:2,opacity:guardando?0.7:1}}>{guardando?"Guardando..."+(extrasCount>0?" ("+( extrasCount+1)+" servicios)":""):"Guardar"+(extrasCount>0?" (1+"+(extrasCount)+"días)":"")}</button>
             </div>
           </div>
         </div>

@@ -252,8 +252,9 @@ function Main() {
   }
 
   function agregarFechaRep(){
-    if(!repFechaInput)return;
-    if(!repFechas.includes(repFechaInput))setRepFechas(prev=>[...prev,repFechaInput]);
+    const v=repFechaInput.trim();
+    if(!v)return;
+    setRepFechas(prev=>prev.includes(v)?prev:[...prev,v]);
     setRepFechaInput("");
   }
 
@@ -283,8 +284,9 @@ function Main() {
     if(editId){
       await PATCH("servicios",editId,base);
     } else {
+      // Guardar servicio principal
       await POST("servicios",{...base,fecha:fecha});
-      // Repetir en otras fechas
+      // Repetir en fechas extras
       const extras=getFechasRepeticion();
       for(const f of extras){
         await POST("servicios",{...base,fecha:f});

@@ -283,6 +283,11 @@ function Main() {
     };
     if(editId){
       await PATCH("servicios",editId,base);
+      // Si eligió repetir, crear copias adicionales
+      const extras=getFechasRepeticion();
+      for(const f of extras){
+        await POST("servicios",{...base,fecha:f});
+      }
     } else {
       // Guardar servicio principal
       await POST("servicios",{...base,fecha:fecha});
@@ -584,43 +589,41 @@ function Main() {
                   )}
                 </div>
 
-                {/* REPETICIÓN - solo para nuevo servicio */}
-                {!editId&&(
-                  <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"14px",marginBottom:10}}>
-                    <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:10}}>🔁 Repetir servicio en otras fechas</div>
-                    <div style={{display:"flex",gap:6,marginBottom:12}}>
-                      {[["ninguna","No repetir"],["fechas","Fechas específicas"],["dias","Cantidad de días"]].map(([val,lbl2])=>(
-                        <button key={val} onClick={()=>setRepTipo(val)} style={{flex:1,padding:"8px 4px",borderRadius:9,border:"none",background:repTipo===val?"#e74c3c":"#f0f0f0",color:repTipo===val?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:700}}>{lbl2}</button>
-                      ))}
-                    </div>
-                    {repTipo==="fechas"&&(
-                      <div>
-                        <div style={{display:"flex",gap:6,marginBottom:8}}>
-                          <input type="date" value={repFechaInput} onChange={e=>setRepFechaInput(e.target.value)} style={{...INP,marginBottom:0,flex:1}}/>
-                          <button onClick={agregarFechaRep} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:9,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18,flexShrink:0}}>+</button>
-                        </div>
-                        {repFechas.length>0&&(
-                          <div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 10px"}}>
-                            {repFechas.map((f,i)=>(
-                              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
-                                <span style={{fontSize:13,color:"#333"}}>{fmtC(f)}</span>
-                                <button onClick={()=>setRepFechas(repFechas.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:16,fontWeight:700}}>×</button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {repTipo==="dias"&&(
-                      <div>
-                        <label style={LBL}>Repetir los próximos X días</label>
-                        <input type="number" min="1" max="365" placeholder="Ej: 30" value={repCantDias} onChange={e=>setRepCantDias(e.target.value)} style={INP}/>
-                        {repCantDias>0&&<div style={{fontSize:12,color:"#27ae60",fontWeight:600}}>✅ Se va a crear en {repCantDias} días adicionales</div>}
-                      </div>
-                    )}
-                    {extrasCount>0&&<div style={{marginTop:8,fontSize:12,color:"#8e44ad",fontWeight:600}}>🔁 Total: 1 servicio original + {extrasCount} copias = {extrasCount+1} servicios</div>}
+                {/* REPETICIÓN - disponible siempre */}
+                <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"14px",marginBottom:10}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:10}}>🔁 Repetir servicio en otras fechas</div>
+                  <div style={{display:"flex",gap:6,marginBottom:12}}>
+                    {[["ninguna","No repetir"],["fechas","Fechas específicas"],["dias","Cantidad de días"]].map(([val,lbl2])=>(
+                      <button key={val} onClick={()=>setRepTipo(val)} style={{flex:1,padding:"8px 4px",borderRadius:9,border:"none",background:repTipo===val?"#e74c3c":"#f0f0f0",color:repTipo===val?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:700}}>{lbl2}</button>
+                    ))}
                   </div>
-                )}
+                  {repTipo==="fechas"&&(
+                    <div>
+                      <div style={{display:"flex",gap:6,marginBottom:8}}>
+                        <input type="date" value={repFechaInput} onChange={e=>setRepFechaInput(e.target.value)} style={{...INP,marginBottom:0,flex:1}}/>
+                        <button onClick={agregarFechaRep} style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:9,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:18,flexShrink:0}}>+</button>
+                      </div>
+                      {repFechas.length>0&&(
+                        <div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 10px"}}>
+                          {repFechas.map((f,i)=>(
+                            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
+                              <span style={{fontSize:13,color:"#333"}}>{fmtC(f)}</span>
+                              <button onClick={()=>setRepFechas(repFechas.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:16,fontWeight:700}}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {repTipo==="dias"&&(
+                    <div>
+                      <label style={LBL}>Repetir los próximos X días</label>
+                      <input type="number" min="1" max="365" placeholder="Ej: 30" value={repCantDias} onChange={e=>setRepCantDias(e.target.value)} style={INP}/>
+                      {repCantDias>0&&<div style={{fontSize:12,color:"#27ae60",fontWeight:600}}>✅ Se va a crear en {repCantDias} días adicionales</div>}
+                    </div>
+                  )}
+                  {extrasCount>0&&<div style={{marginTop:8,fontSize:12,color:"#8e44ad",fontWeight:600}}>🔁 Se van a crear {extrasCount} copias adicionales</div>}
+                </div>
               </div>
             )}
 
